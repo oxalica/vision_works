@@ -1,0 +1,5 @@
+*.o
+/init
+/.vscode
+/build
+/target
