@@ -5,10 +5,18 @@ use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Builder};
 use once_cell::sync::OnceCell;
 use opencv::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
+
+macro_rules! log {
+    ($fmt:literal $($tt:tt)*) => {
+        crate::send_log_event(format!(concat!($fmt, "\n") $($tt)*))
+    };
+}
 
 mod ext;
+mod processor;
 use ext::{BuilderExtManualExt as _, OptionExt as _};
+use processor::{load_processors, ImageProcessor};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -18,6 +26,7 @@ static GUI_EVENT_TX: OnceCell<glib::Sender<GuiEvent>> = OnceCell::new();
 #[derive(Debug)]
 enum GuiEvent {
     Log(String),
+    ImageOutput(Mat),
 }
 
 #[derive(Debug, Default)]
@@ -35,16 +44,19 @@ fn main() {
         let window: ApplicationWindow = builder.object("wnd_main");
         window.set_application(Some(app));
 
-        let state: Arc<Mutex<GuiState>> = Default::default();
+        let processors = load_processors();
+
+        let state: Rc<RefCell<GuiState>> = Default::default();
         builder.connect_signals(|builder, handler_name| {
-            resolve_handler(&builder, &state, handler_name)
+            resolve_handler(&builder, &state, &processors, handler_name)
         });
 
         let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         GUI_EVENT_TX.set(tx).expect("Initialize more than once");
         let builder = builder.clone();
+        let state = state.clone();
         rx.attach(None, move |event| {
-            on_gui_event(&builder, event);
+            on_gui_event(&builder, &state, event);
             glib::Continue(true)
         });
         window.show_all();
@@ -52,7 +64,7 @@ fn main() {
     app.run(&std::env::args().collect::<Vec<_>>());
 }
 
-fn on_gui_event(builder: &Builder, event: GuiEvent) {
+fn on_gui_event(builder: &Builder, state: &Rc<RefCell<GuiState>>, event: GuiEvent) {
     match event {
         GuiEvent::Log(content) => {
             // https://mail.gnome.org/archives/gtk-list/2007-May/msg00034.html
@@ -63,6 +75,13 @@ fn on_gui_event(builder: &Builder, event: GuiEvent) {
             buf.move_mark(&mark, &iter);
             buf.insert_at_cursor(&content);
             txt.scroll_to_mark(&mark, 0.0, false, 0.0, 0.0);
+        }
+        GuiEvent::ImageOutput(mat) => {
+            let img: gtk::Image = builder.object("img_output");
+            match render_image(&img, Some(&mat)) {
+                Ok(()) => state.borrow_mut().image_output = Some(mat),
+                Err(err) => log!("Render failed: {}", err),
+            }
         }
     }
 }
@@ -75,26 +94,21 @@ fn send_log_event(content: String) {
         .unwrap();
 }
 
-macro_rules! log {
-    ($fmt:literal $($tt:tt)*) => {
-        crate::send_log_event(format!(concat!($fmt, "\n") $($tt)*))
-    };
-}
-
 fn resolve_handler(
     builder: &Builder,
-    state: &Arc<Mutex<GuiState>>,
+    state: &Rc<RefCell<GuiState>>,
+    processors: &[Arc<dyn ImageProcessor>],
     handler_name: &str,
 ) -> Box<dyn Fn(&[Value]) -> Option<Value> + 'static> {
     let builder = builder.clone();
     let state = state.clone();
     match handler_name {
         "on_select_source_file" => Box::new(move |_| {
-            on_select_source_file(&builder);
+            on_select_source_file(&builder, &state);
             None
         }),
         "on_reload_input" => Box::new(move |_| {
-            on_select_source_file(&builder);
+            on_select_source_file(&builder, &state);
             None
         }),
         "on_clear_log" => Box::new(move |_| {
@@ -103,7 +117,7 @@ fn resolve_handler(
             None
         }),
         "on_swap_img" => Box::new(move |_| {
-            let st = &mut *state.lock().unwrap();
+            let st = &mut *state.borrow_mut();
             std::mem::swap(&mut st.image_input, &mut st.image_output);
             let img1: gtk::Image = builder.object("img_input");
             let img2: gtk::Image = builder.object("img_output");
@@ -112,19 +126,77 @@ fn resolve_handler(
             img2.set_from_pixbuf(buf1.as_ref());
             None
         }),
-        _ => unreachable!("Unknow handle_name: {}", handler_name),
+        _ => {
+            for pro in processors {
+                let pro_ = pro.clone();
+                let state = state.clone();
+                let run = Box::new(move |args| {
+                    processor_runner(pro_.clone(), args, state.clone());
+                });
+                if let Some(h) = pro.register_handler(&builder, handler_name, run) {
+                    return Box::new(move |_| {
+                        h();
+                        None
+                    });
+                }
+            }
+            unreachable!("Unhandled event: {}", handler_name)
+        }
     }
 }
 
-fn on_select_source_file(builder: &Builder) {
+fn processor_runner(
+    pro: Arc<dyn ImageProcessor>,
+    args: Box<dyn std::any::Any + Send>,
+    state: Rc<RefCell<GuiState>>,
+) {
+    let img = match (|| -> Result<_> {
+        let state = state.borrow();
+        let img = state.image_input.as_ref().context("No input")?;
+        Ok(Mat::copy(img).context("Copy failed")?)
+    })() {
+        Ok(img) => img,
+        Err(err) => {
+            log!("Error: {}", err);
+            return;
+        }
+    };
+
+    std::thread::spawn(move || {
+        log!("Running processor...");
+        let t = std::time::Instant::now();
+        let ret = pro.run(args, img);
+        let ns = t.elapsed().as_nanos();
+        match ret {
+            Err(err) => log!("Failed: {}", err),
+            Ok(ret_img) => {
+                GUI_EVENT_TX
+                    .get()
+                    .unwrap()
+                    .send(GuiEvent::ImageOutput(ret_img))
+                    .unwrap();
+                log!(
+                    "Done in {}.{:03} {:03} {:03} s",
+                    ns / 1_000_000_000,
+                    ns / 1_000_000 % 1_000,
+                    ns / 1_000 % 1_000,
+                    ns / 1 % 1_000,
+                )
+            }
+        }
+    });
+}
+
+fn on_select_source_file(builder: &Builder, state: &Rc<RefCell<GuiState>>) {
     let fin: gtk::FileChooser = builder.object("file_input");
     if let Some(file_name) = fin.get_filename() {
         log!("Loading file {}", file_name.display());
         match (|| -> Result<_> {
             let mat = load_image(&file_name).context("Load image")?;
             let img = builder.object("img_input");
-            render_output_image(&img, Some(&mat)).context("Render image")?;
+            render_image(&img, Some(&mat)).context("Render image")?;
             log!("Loaded {}x{}", mat.rows(), mat.cols());
+            state.borrow_mut().image_input = Some(mat);
             Ok(())
         })() {
             Ok(()) => {}
@@ -140,7 +212,7 @@ fn load_image(path: &std::path::Path) -> Result<Mat> {
     Ok(img)
 }
 
-fn render_output_image(img: &gtk::Image, data: Option<&Mat>) -> Result<()> {
+fn render_image(img: &gtk::Image, data: Option<&Mat>) -> Result<()> {
     use gdk_pixbuf::{Colorspace, Pixbuf};
     use opencv::core::Vec3b;
 
