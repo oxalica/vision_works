@@ -3,7 +3,7 @@ use gtk::Builder;
 use opencv::prelude::Mat;
 use std::{any::Any, sync::Arc};
 
-mod linear_transform;
+mod affine_transform;
 
 pub trait ImageProcessor: Send + Sync {
     fn register_handler(
@@ -17,5 +17,5 @@ pub trait ImageProcessor: Send + Sync {
 }
 
 pub fn load_processors() -> Vec<Arc<dyn ImageProcessor>> {
-    vec![Arc::new(linear_transform::LinearTransform)]
+    vec![Arc::new(affine_transform::AffineTransform)]
 }

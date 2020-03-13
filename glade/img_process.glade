@@ -3,7 +3,8 @@
 <interface>
   <requires lib="gtk+" version="3.20"/>
   <object class="GtkAdjustment" id="adj_rotate">
-    <property name="upper">360</property>
+    <property name="lower">-180</property>
+    <property name="upper">180</property>
     <property name="step_increment">10</property>
     <property name="page_increment">90</property>
   </object>
@@ -120,7 +121,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkScale" id="scl_linear_trans_scale">
+                  <object class="GtkScale" id="scl_affine_trans_scale">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
@@ -135,12 +136,12 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkScale" id="scl_linear_trans_rotate">
+                  <object class="GtkScale" id="scl_affine_trans_rotate">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="adjustment">adj_rotate</property>
                     <property name="round_digits">1</property>
-                    <property name="digits">2</property>
+                    <property name="digits">0</property>
                     <property name="value_pos">left</property>
                   </object>
                   <packing>
@@ -155,7 +156,7 @@
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="use_stock">True</property>
-                    <signal name="clicked" handler="on_linear_trans_reset" swapped="no"/>
+                    <signal name="clicked" handler="on_affine_trans_reset" swapped="no"/>
                   </object>
                   <packing>
                     <property name="left_attach">2</property>
@@ -170,7 +171,7 @@
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
                     <property name="use_stock">True</property>
-                    <signal name="clicked" handler="on_linear_trans_run" swapped="no"/>
+                    <signal name="clicked" handler="on_affine_trans_run" swapped="no"/>
                   </object>
                   <packing>
                     <property name="left_attach">3</property>
@@ -184,7 +185,7 @@
               <object class="GtkLabel">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Linear trans</property>
+                <property name="label" translatable="yes">Affine trans</property>
               </object>
               <packing>
                 <property name="tab_fill">False</property>
