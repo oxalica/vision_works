@@ -765,5 +765,6 @@ dependencies = [
  "gio",
  "glib",
  "gtk",
+ "once_cell",
  "opencv",
 ]

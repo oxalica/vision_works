@@ -12,4 +12,5 @@ gdk-pixbuf = { version = "0.8.0" }
 gio = { version = "0.8.1", features = ["v2_44"] }
 glib = "0.9.3"
 gtk = { version = "0.8.1", features = ["v3_16"] }
+once_cell = "1.3.1"
 opencv = "0.32.0"
