@@ -1,4 +1,4 @@
-use failure::{Error, ResultExt as _};
+use failure::{bail, Error, ResultExt as _};
 use gio::prelude::*;
 use glib::value::Value;
 use gtk::prelude::*;
@@ -214,7 +214,7 @@ fn load_image(path: &std::path::Path) -> Result<Mat> {
 
 fn render_image(img: &gtk::Image, data: Option<&Mat>) -> Result<()> {
     use gdk_pixbuf::{Colorspace, Pixbuf};
-    use opencv::core::Vec3b;
+    use opencv::core::*;
 
     let data = match data {
         Some(data) => data,
@@ -226,11 +226,33 @@ fn render_image(img: &gtk::Image, data: Option<&Mat>) -> Result<()> {
 
     let (h, w) = (data.rows(), data.cols());
     let pixbuf = Pixbuf::new(Colorspace::Rgb, false, 8, w, h).context("Pixbuf::new")?;
-    for x in 0..h {
-        for y in 0..w {
-            let [b, g, r] = data.at_2d::<Vec3b>(x, y).context("Read Mat")?.0;
-            pixbuf.put_pixel(y, x, r, g, b, 0);
+    let typ = data.typ()?;
+    if typ == CV_8UC3 {
+        // Normal BGR.
+        for x in 0..h {
+            for y in 0..w {
+                let [b, g, r] = data.at_2d::<Vec3b>(x, y).unwrap().0;
+                pixbuf.put_pixel(y, x, r, g, b, 0);
+            }
         }
+    } else if typ == CV_32FC2 {
+        // Complex matrix produced by DFT. Require normalization.
+        let mut mx = std::f32::EPSILON;
+        for x in 0..h {
+            for y in 0..w {
+                let [a, b] = data.at_2d::<Vec2f>(x, y).unwrap().0;
+                mx = mx.max((a.hypot(b) + 1.0).ln());
+            }
+        }
+        for x in 0..h {
+            for y in 0..w {
+                let [a, b] = data.at_2d::<Vec2f>(x, y).unwrap().0;
+                let gray = ((a.hypot(b) + 1.0).ln() / mx * 256.0) as u8;
+                pixbuf.put_pixel(y, x, gray, gray, gray, 0);
+            }
+        }
+    } else {
+        bail!("Cannot render matrix of opencv type {}", typ);
     }
 
     img.set_from_pixbuf(Some(&pixbuf));
