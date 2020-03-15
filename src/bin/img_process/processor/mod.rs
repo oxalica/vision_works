@@ -5,6 +5,7 @@ use std::{any::Any, sync::Arc};
 
 mod affine_transform;
 mod dft;
+mod noise;
 
 pub trait ImageProcessor: Send + Sync {
     fn register_handler(
@@ -21,5 +22,6 @@ pub fn load_processors() -> Vec<Arc<dyn ImageProcessor>> {
     vec![
         Arc::new(affine_transform::AffineTransform),
         Arc::new(dft::DFT),
+        Arc::new(noise::Noise),
     ]
 }
