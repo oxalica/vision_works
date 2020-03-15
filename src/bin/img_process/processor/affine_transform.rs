@@ -15,10 +15,12 @@ impl super::ImageProcessor for AffineTransform {
         let builder = builder.clone();
         match handler_name {
             "on_affine_trans_reset" => Some(Box::new(move || {
-                let scale: gtk::Scale = builder.object("scl_affine_trans_scale");
-                let rotate: gtk::Scale = builder.object("scl_affine_trans_rotate");
-                scale.set_value(1.0);
-                rotate.set_value(0.0);
+                builder
+                    .object::<gtk::Scale>("scl_affine_trans_scale")
+                    .set_value(1.0);
+                builder
+                    .object::<gtk::Scale>("scl_affine_trans_rotate")
+                    .set_value(0.0);
             })),
             "on_affine_trans_run" => Some(Box::new(move || {
                 let scale: gtk::Scale = builder.object("scl_affine_trans_scale");
