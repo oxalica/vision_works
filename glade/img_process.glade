@@ -2,36 +2,57 @@
 <!-- Generated with glade 3.22.2 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
-  <object class="GtkAdjustment" id="adj_kernel_size">
-    <property name="lower">3</property>
-    <property name="upper">31</property>
-    <property name="value">3</property>
-    <property name="step_increment">2</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="adj_mu">
-    <property name="lower">-256</property>
-    <property name="upper">256</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="adj_rotate">
+  <object class="GtkAdjustment" id="adj_affine_trans_rotate">
     <property name="lower">-180</property>
     <property name="upper">180</property>
     <property name="step_increment">10</property>
     <property name="page_increment">90</property>
   </object>
-  <object class="GtkAdjustment" id="adj_scale">
+  <object class="GtkAdjustment" id="adj_affine_trans_scale">
     <property name="lower">0.25</property>
     <property name="upper">4</property>
     <property name="value">1</property>
     <property name="step_increment">0.20000000000000001</property>
     <property name="page_increment">1</property>
   </object>
-  <object class="GtkAdjustment" id="adj_sigma">
+  <object class="GtkAdjustment" id="adj_filter_bilateral_sigma_d">
+    <property name="lower">1</property>
+    <property name="upper">100</property>
+    <property name="value">5</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_filter_bilateral_sigma_r">
+    <property name="lower">1</property>
+    <property name="upper">100</property>
+    <property name="value">5</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_filter_gauss_sigma">
     <property name="lower">1</property>
     <property name="upper">128</property>
-    <property name="value">1</property>
+    <property name="value">5</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_filter_neighbor">
+    <property name="lower">3</property>
+    <property name="upper">31</property>
+    <property name="value">5</property>
+    <property name="step_increment">2</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_noise_mu">
+    <property name="lower">-256</property>
+    <property name="upper">256</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_noise_sigma">
+    <property name="lower">1</property>
+    <property name="upper">128</property>
+    <property name="value">5</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
@@ -145,7 +166,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="adjustment">adj_scale</property>
+                    <property name="adjustment">adj_affine_trans_scale</property>
                     <property name="round_digits">1</property>
                     <property name="digits">2</property>
                     <property name="value_pos">left</property>
@@ -159,7 +180,7 @@
                   <object class="GtkScale" id="scl_affine_trans_rotate">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="adjustment">adj_rotate</property>
+                    <property name="adjustment">adj_affine_trans_rotate</property>
                     <property name="round_digits">1</property>
                     <property name="digits">0</property>
                     <property name="value_pos">left</property>
@@ -215,7 +236,6 @@
               <object class="GtkGrid">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="row_homogeneous">True</property>
                 <property name="column_homogeneous">True</property>
                 <child>
                   <object class="GtkButton">
@@ -305,7 +325,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="adjustment">adj_mu</property>
+                    <property name="adjustment">adj_noise_mu</property>
                     <property name="round_digits">1</property>
                     <property name="value_pos">left</property>
                   </object>
@@ -318,7 +338,7 @@
                   <object class="GtkScale" id="scl_noise_gauss_sigma">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="adjustment">adj_sigma</property>
+                    <property name="adjustment">adj_noise_sigma</property>
                     <property name="round_digits">1</property>
                     <property name="value_pos">left</property>
                   </object>
@@ -379,109 +399,37 @@
                 <property name="can_focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkFrame">
+                  <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label_xalign">0</property>
-                    <property name="shadow_type">none</property>
                     <child>
-                      <object class="GtkAlignment">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="left_padding">12</property>
-                        <child>
-                          <object class="GtkGrid">
-                            <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <child>
-                              <object class="GtkLabel">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="halign">end</property>
-                                <property name="label" translatable="yes">Kernel size: </property>
-                              </object>
-                              <packing>
-                                <property name="left_attach">0</property>
-                                <property name="top_attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkScale" id="scl_filter_kernel_size">
-                                <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="hexpand">True</property>
-                                <property name="adjustment">adj_kernel_size</property>
-                                <property name="round_digits">1</property>
-                                <property name="digits">0</property>
-                                <property name="value_pos">left</property>
-                              </object>
-                              <packing>
-                                <property name="left_attach">1</property>
-                                <property name="top_attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkButton">
-                                <property name="label" translatable="yes">Box filter</property>
-                                <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="receives_default">True</property>
-                                <signal name="clicked" handler="on_filter_run_box" swapped="no"/>
-                              </object>
-                              <packing>
-                                <property name="left_attach">2</property>
-                                <property name="top_attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkLabel">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="halign">end</property>
-                                <property name="label" translatable="yes">Gauss σ: </property>
-                              </object>
-                              <packing>
-                                <property name="left_attach">0</property>
-                                <property name="top_attach">1</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkScale" id="scl_filter_gauss_sigma">
-                                <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="hexpand">True</property>
-                                <property name="adjustment">adj_sigma</property>
-                                <property name="round_digits">0</property>
-                                <property name="value_pos">left</property>
-                              </object>
-                              <packing>
-                                <property name="left_attach">1</property>
-                                <property name="top_attach">1</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkButton">
-                                <property name="label" translatable="yes">Gaussian filter</property>
-                                <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="receives_default">True</property>
-                                <signal name="clicked" handler="on_filter_run_gauss" swapped="no"/>
-                              </object>
-                              <packing>
-                                <property name="left_attach">2</property>
-                                <property name="top_attach">1</property>
-                              </packing>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                    <child type="label">
                       <object class="GtkLabel">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Linear filter</property>
+                        <property name="halign">end</property>
+                        <property name="label" translatable="yes">Neighbor (odd):</property>
                       </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkScale" id="scl_filter_neighbor">
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="hexpand">True</property>
+                        <property name="adjustment">adj_filter_neighbor</property>
+                        <property name="round_digits">1</property>
+                        <property name="digits">0</property>
+                        <property name="value_pos">left</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
                     </child>
                   </object>
                   <packing>
@@ -506,12 +454,11 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <child>
-                              <object class="GtkButton">
-                                <property name="label" translatable="yes">Wiener filter</property>
+                              <object class="GtkLabel">
                                 <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="receives_default">True</property>
-                                <signal name="clicked" handler="on_filter_run_wiener" swapped="no"/>
+                                <property name="can_focus">False</property>
+                                <property name="halign">end</property>
+                                <property name="label" translatable="yes">σ: </property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -520,17 +467,33 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkButton">
-                                <property name="label" translatable="yes">Bilateral filter</property>
+                              <object class="GtkScale" id="scl_filter_gauss_sigma">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="receives_default">True</property>
-                                <signal name="clicked" handler="on_filter_run_bilateral" swapped="no"/>
+                                <property name="hexpand">True</property>
+                                <property name="adjustment">adj_filter_gauss_sigma</property>
+                                <property name="round_digits">0</property>
+                                <property name="value_pos">left</property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
                                 <property name="position">1</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="label">gtk-apply</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                                <property name="use_stock">True</property>
+                                <signal name="clicked" handler="on_filter_run_gauss" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">2</property>
                               </packing>
                             </child>
                           </object>
@@ -541,7 +504,7 @@
                       <object class="GtkLabel">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Non-linear filter</property>
+                        <property name="label" translatable="yes">Gaussian filter</property>
                       </object>
                     </child>
                   </object>
@@ -549,6 +512,142 @@
                     <property name="expand">False</property>
                     <property name="fill">True</property>
                     <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkFrame">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="label_xalign">0</property>
+                    <property name="shadow_type">none</property>
+                    <child>
+                      <object class="GtkAlignment">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="left_padding">12</property>
+                        <child>
+                          <object class="GtkGrid">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                                <property name="label" translatable="yes">σ(d): </property>
+                              </object>
+                              <packing>
+                                <property name="left_attach">0</property>
+                                <property name="top_attach">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                                <property name="label" translatable="yes">σ(r): </property>
+                              </object>
+                              <packing>
+                                <property name="left_attach">0</property>
+                                <property name="top_attach">1</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkScale" id="scl_filter_bilateral_sigma_d">
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="hexpand">True</property>
+                                <property name="adjustment">adj_filter_bilateral_sigma_d</property>
+                                <property name="round_digits">1</property>
+                                <property name="value_pos">left</property>
+                              </object>
+                              <packing>
+                                <property name="left_attach">1</property>
+                                <property name="top_attach">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkScale" id="scl_filter_bilateral_sigma_r">
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="adjustment">adj_filter_bilateral_sigma_r</property>
+                                <property name="round_digits">1</property>
+                                <property name="value_pos">left</property>
+                              </object>
+                              <packing>
+                                <property name="left_attach">1</property>
+                                <property name="top_attach">1</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton">
+                                <property name="label">gtk-apply</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                                <property name="use_stock">True</property>
+                                <signal name="clicked" handler="on_filter_run_bilateral" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="left_attach">2</property>
+                                <property name="top_attach">0</property>
+                                <property name="height">2</property>
+                              </packing>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child type="label">
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="label" translatable="yes">Bilateral filter</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkButton">
+                        <property name="label" translatable="yes">Box filter</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="receives_default">True</property>
+                        <signal name="clicked" handler="on_filter_run_box" swapped="no"/>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkButton">
+                        <property name="label" translatable="yes">Wiener filter</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">True</property>
+                        <property name="receives_default">True</property>
+                        <signal name="clicked" handler="on_filter_run_wiener" swapped="no"/>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
                   </packing>
                 </child>
               </object>

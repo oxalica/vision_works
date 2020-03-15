@@ -24,14 +24,26 @@ impl super::ImageProcessor for Filter {
         let on_filter = |filter_ty: FilterType| {
             let builder = builder.clone();
             Box::new(move || {
-                let kernel_size = builder
-                    .object::<gtk::Scale>("scl_filter_kernel_size")
+                let neighbor = builder
+                    .object::<gtk::Scale>("scl_filter_neighbor")
                     .get_value()
                     .round() as i32;
                 let gauss_sigma = builder
                     .object::<gtk::Scale>("scl_filter_gauss_sigma")
                     .get_value() as f32;
-                run(Box::new((filter_ty, kernel_size, gauss_sigma)));
+                let bila_sigma_d = builder
+                    .object::<gtk::Scale>("scl_filter_bilateral_sigma_d")
+                    .get_value() as f32;
+                let bila_sigma_r = builder
+                    .object::<gtk::Scale>("scl_filter_bilateral_sigma_r")
+                    .get_value() as f32;
+                run(Box::new((
+                    filter_ty,
+                    neighbor,
+                    gauss_sigma,
+                    bila_sigma_d,
+                    bila_sigma_r,
+                )));
             })
         };
 
@@ -45,13 +57,14 @@ impl super::ImageProcessor for Filter {
     }
 
     fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat> {
-        let (filter_ty, kernel_size, gauss_sigma): (FilterType, i32, f32) =
+        type Ty = (FilterType, i32, f32, f32, f32);
+        let (filter_ty, neighbor, gauss_sigma, bila_sigma_d, bila_sigma_r): Ty =
             *args.downcast_ref().unwrap();
         match filter_ty {
-            FilterType::Box => box_filter(src, kernel_size),
-            FilterType::Gaussian => gauss_filter(src, kernel_size, gauss_sigma),
-            FilterType::Wiener => wiener_filter(src),
-            FilterType::Bilateral => bilateral_filter(src),
+            FilterType::Box => box_filter(src, neighbor),
+            FilterType::Gaussian => gauss_filter(src, neighbor, gauss_sigma),
+            FilterType::Wiener => wiener_filter(src, neighbor),
+            FilterType::Bilateral => bilateral_filter(src, neighbor, bila_sigma_d, bila_sigma_r),
         }
     }
 }
@@ -66,7 +79,7 @@ fn box_filter(src: Mat, kernel_size: i32) -> Result<Mat> {
 }
 
 /// Kernel:
-/// G(x, y) = A * e^(-x^2/σ^2 -y^2/σ^2)
+/// G(x, y) = 1/(2πσ^2) * e^((-x^2-y^2)/σ^2)
 fn gauss_filter(src: Mat, kernel_size: i32, sigma: f32) -> Result<Mat> {
     let mut kernel =
         Mat::new_rows_cols_with_default(kernel_size, kernel_size, CV_32F, Scalar::all(0.0))?;
@@ -74,9 +87,7 @@ fn gauss_filter(src: Mat, kernel_size: i32, sigma: f32) -> Result<Mat> {
     let mut sum = 0.0;
     for x in 0..kernel_size {
         for y in 0..kernel_size {
-            let ex = -((x - mid) as f32 / sigma).powi(2);
-            let ey = -((y - mid) as f32 / sigma).powi(2);
-            let v = (ex + ey).exp();
+            let v = ((-(x - mid).pow(2) - (y - mid).pow(2)) as f32 / sigma.powi(2)).exp();
             sum += v;
             *kernel.at_2d_mut::<f32>(x, y).unwrap() = v;
         }
@@ -128,10 +139,10 @@ fn linear_filter(src: Mat, kernel: Mat) -> Result<Mat> {
     Ok(dest)
 }
 
-fn wiener_filter(src: Mat) -> Result<Mat> {
+fn wiener_filter(src: Mat, neighbor: i32) -> Result<Mat> {
     todo!()
 }
 
-fn bilateral_filter(src: Mat) -> Result<Mat> {
+fn bilateral_filter(src: Mat, neighbor: i32, sigma_d: f32, sigma_r: f32) -> Result<Mat> {
     todo!()
 }
