@@ -122,11 +122,35 @@ fn linear_filter(src: Array3<f32>, kernel: Array2<f32>) -> Array3<f32> {
     dest
 }
 
+/// https://bokjan.com/2018/11/lab-digital-image-processing.html#menu_index_19
 fn wiener_filter(src: Array3<f32>, neighbor: usize) -> Array3<f32> {
-    // let (h, w, ncol) = src.dim();
-    // assert_eq!(ncol, 3);
-    // let mut mean = Array::zeros((h, w, 3));
-    todo!()
+    let (h, w, ncol) = src.dim();
+    assert_eq!(ncol, 3);
+    assert!(neighbor <= h && neighbor <= w);
+    let (h2, w2) = (h - neighbor, w - neighbor);
+
+    let mut mean = Array::zeros((h2, w2, 3));
+    for ((x, y, col), v) in mean.indexed_iter_mut() {
+        *v = src.slice(s![x..x + neighbor, y..y + neighbor, col]).sum()
+            / (neighbor * neighbor) as f32;
+    }
+
+    let mut dev = Array::zeros((h2, w2, 3));
+    for ((x, y, col), v) in dev.indexed_iter_mut() {
+        let m = &src.slice(s![x..x + neighbor, y..y + neighbor, col])
+            - &ArrayView::from(&[mean[[x, y, col]]]);
+        *v = (&m * &m).sum() / (neighbor * neighbor) as f32;
+    }
+
+    let nu2 = dev.sum() / (h * w) as f32;
+
+    let mut dest = Array::zeros((h2, w2, 3));
+    for ((x, y, col), v) in dest.indexed_iter_mut() {
+        let (mean, dev) = (mean[[x, y, col]], dev[[x, y, col]]);
+        *v = mean + (dev - nu2).max(0.) / dev.max(nu2) * (src[[x, y, col]] - mean);
+    }
+
+    dest
 }
 
 fn bilateral_filter(src: Array3<f32>, neighbor: usize, sigma_d: f32, sigma_r: f32) -> Array3<f32> {
