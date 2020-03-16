@@ -53,29 +53,31 @@ fn affine_trans(src: Array3<f32>, scale: f32, rotate: f32) -> Array3<f32> {
         .dot(&get_translate_mat(-(h2 as f32 / 2.0), -(w2 as f32 / 2.0)));
 
     let mut dest = Array::zeros((h2, w2, 3));
-    for dest_x in 0..h2 {
-        for dest_y in 0..w2 {
-            let src_pt = inv_trans_mat.dot(&array![[dest_x as f32], [dest_y as f32], [1.]]);
-            let (x, y) = (src_pt[[0, 0]], src_pt[[1, 0]]);
-            // Top-left corner of neighborhood.
-            let (x_, y_) = (x.floor() as isize - 1, y.floor() as isize - 1);
+    for ((dest_x, dest_y, col), v) in dest.indexed_iter_mut() {
+        // Slow: Result matrix is on heap.
+        // let src_pt = inv_trans_mat.dot(&array![[dest_x as f32], [dest_y as f32], [1.]]);
+        // let (x, y) = (src_pt[[0, 0]], src_pt[[1, 0]]);
 
-            for col in 0..3 {
-                let mut xsamples = [0.0; 4];
-                for i in 0..4 {
-                    let mut ysamples = [0.0; 4];
-                    for j in 0..4 {
-                        // Treat neighbor pixels out of image as black.
-                        if 0 <= x_ + i && x_ + i < h as _ && 0 <= y_ + j && y_ + j < w as _ {
-                            ysamples[j as usize] = src[[(x_ + i) as _, (y_ + j) as _, col]];
-                        }
-                    }
-                    xsamples[i as usize] = interpolate3(ysamples, y - y_ as f32);
+        let (dest_x, dest_y) = (dest_x as f32, dest_y as f32);
+        let m = &inv_trans_mat;
+        let x = m[[0, 0]] * dest_x + m[[0, 1]] * dest_y + m[[0, 2]];
+        let y = m[[1, 0]] * dest_x + m[[1, 1]] * dest_y + m[[1, 2]];
+
+        // Top-left corner of neighborhood.
+        let (x_, y_) = (x.floor() as isize - 1, y.floor() as isize - 1);
+
+        let mut xsamples = [0.0; 4];
+        for i in 0..4 {
+            let mut ysamples = [0.0; 4];
+            for j in 0..4 {
+                // Treat neighbor pixels out of image as black.
+                if 0 <= x_ + i && x_ + i < h as _ && 0 <= y_ + j && y_ + j < w as _ {
+                    ysamples[j as usize] = src[[(x_ + i) as _, (y_ + j) as _, col]];
                 }
-                let sample = interpolate3(xsamples, x - x_ as f32);
-                dest[[dest_x, dest_y, col]] = sample;
             }
+            xsamples[i as usize] = interpolate3(ysamples, y - y_ as f32);
         }
+        *v = interpolate3(xsamples, x - x_ as f32);
     }
 
     dest
