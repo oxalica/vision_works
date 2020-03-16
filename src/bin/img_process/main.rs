@@ -244,9 +244,9 @@ fn processor_runner(
                 );
                 return;
             }
-            Ok((Err(err), _)) => log!("Failed: {}", err),
+            Ok((Err(err), _)) => log!("Error: {}", err),
             Err(err) => {
-                log!("Worker panicked: {:?}", err);
+                log!("Error: Worker panicked: {:?}", err);
             }
         }
         GUI_EVENT_TX
