@@ -1,8 +1,8 @@
 use failure::ResultExt as _;
+use gdk_pixbuf::Pixbuf;
 use gio::prelude::*;
 use glib::value::Value;
-use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Builder};
+use gtk::{prelude::*, Application, ApplicationWindow, Builder};
 use once_cell::sync::OnceCell;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
@@ -27,11 +27,23 @@ enum GuiEvent {
     WorkerError,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct GuiState {
-    image_input: Option<Image>,
-    image_output: Option<Image>,
+    image_input: Option<(Image, Pixbuf)>,
+    image_output: Option<(Image, Pixbuf)>,
     processing: bool,
+    auto_shrink: bool,
+}
+
+impl Default for GuiState {
+    fn default() -> Self {
+        Self {
+            image_input: None,
+            image_output: None,
+            processing: false,
+            auto_shrink: true,
+        }
+    }
 }
 
 fn main() {
@@ -76,11 +88,15 @@ fn on_gui_event(builder: &Builder, state: &Rc<RefCell<GuiState>>, event: GuiEven
             txt.scroll_to_mark(&mark, 0.0, false, 0.0, 0.0);
         }
         GuiEvent::ImageOutput(img) => {
-            builder
-                .object::<gtk::Image>("img_output")
-                .set_from_pixbuf(Some(&img.render()));
+            let pixbuf = img.render();
             let mut st = state.borrow_mut();
-            st.image_output = Some(img);
+            auto_rerender(
+                builder,
+                &st,
+                &builder.object::<gtk::Image>("img_output"),
+                &pixbuf,
+            );
+            st.image_output = Some((img, pixbuf));
             st.processing = false;
         }
         GuiEvent::WorkerError => {
@@ -145,6 +161,16 @@ fn resolve_handler(
             img2.set_from_pixbuf(buf1.as_ref());
             None
         }),
+        "on_wnd_resize" => Box::new(move |_| {
+            on_resize(&builder, &state.borrow(), false);
+            None
+        }),
+        "on_toggle_auto_shrink" => Box::new(move |_| {
+            let mut st = state.borrow_mut();
+            st.auto_shrink = !st.auto_shrink;
+            on_resize(&builder, &st, true);
+            None
+        }),
         _ => {
             for pro in processors {
                 let builder_ = builder.clone();
@@ -182,8 +208,8 @@ fn processor_runner(
         .object::<gtk::Image>("img_output")
         .set_from_pixbuf(None);
 
-    let img = match st.image_input.clone() {
-        Some(img) => img,
+    let img = match st.image_input.as_ref() {
+        Some((img, _)) => img.clone(),
         None => {
             log!("Error: No input image");
             return;
@@ -246,9 +272,42 @@ fn on_select_source_file(builder: &Builder, state: &Rc<RefCell<GuiState>>) {
             }
             Ok((img, pixbuf)) => {
                 log!("Loaded {}x{}", pixbuf.get_width(), pixbuf.get_height());
-                state.borrow_mut().image_input = Some(img);
-                img_ctl.set_from_pixbuf(Some(&pixbuf));
+                let mut st = state.borrow_mut();
+                auto_rerender(builder, &st, &img_ctl, &pixbuf);
+                st.image_input = Some((img, pixbuf));
             }
         }
+    }
+}
+
+fn on_resize(builder: &Builder, st: &GuiState, force: bool) {
+    if force || st.auto_shrink {
+        if let Some((_, pixbuf)) = &st.image_input {
+            auto_rerender(&builder, st, &builder.object("img_input"), pixbuf);
+        }
+        if let Some((_, pixbuf)) = &st.image_output {
+            auto_rerender(&builder, st, &builder.object("img_output"), pixbuf);
+        }
+    }
+}
+
+fn auto_rerender(builder: &Builder, st: &GuiState, img_ctl: &gtk::Image, pixbuf: &Pixbuf) {
+    let alloc = builder
+        .object::<gtk::ScrolledWindow>("scw_img_input")
+        .get_allocation();
+    let (h, w) = (pixbuf.get_height(), pixbuf.get_width());
+    let (mxh, mxw) = (alloc.height - 2, alloc.width - 2); // Border
+    let (scale_h, scale_w) = (mxh as f32 / h as f32, mxw as f32 / w as f32);
+    let scale = if scale_h < scale_w { scale_h } else { scale_w };
+
+    if st.auto_shrink && 0.0 < scale && scale < 1.0 {
+        let dest_h = mxh.min((h as f32 * scale) as i32);
+        let dest_w = mxw.min((w as f32 * scale) as i32);
+        let scaled = pixbuf
+            .scale_simple(dest_w, dest_h, gdk_pixbuf::InterpType::Hyper)
+            .unwrap();
+        img_ctl.set_from_pixbuf(Some(&scaled));
+    } else {
+        img_ctl.set_from_pixbuf(Some(&pixbuf));
     }
 }
