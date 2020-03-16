@@ -1,6 +1,8 @@
 use crate::Result;
-use failure::{ensure, ResultExt as _};
+use failure::ensure;
 use gtk::Builder;
+use ndarray::prelude::*;
+use num_complex::Complex32 as C;
 use opencv::prelude::*;
 use std::any::Any;
 
@@ -21,85 +23,155 @@ impl super::ImageProcessor for DFT {
     }
 
     fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat> {
-        let is_inv: bool = *args.downcast_ref().unwrap();
-        if is_inv {
-            idft(src)
+        use opencv::core::*;
+        let inverse: bool = *args.downcast_ref().unwrap();
+        if !inverse {
+            ensure!(src.typ()? == CV_8UC3, "DFT input should be a normal image");
+
+            // Convert to complex grayscale image.
+            let (h, w) = (src.rows() as usize, src.cols() as usize);
+            let mut mat: Array2<C> = Array::zeros((h, w));
+            for ((x, y), p) in mat.indexed_iter_mut() {
+                let [b, g, r] = src.at_2d::<Vec3b>(x as _, y as _).unwrap().0;
+                let mut gray =
+                    0.299 * b as f32 / 256.0 + 0.587 * g as f32 / 256.0 + 0.114 * r as f32 / 256.0;
+                // FFT shift
+                if (x + y) % 2 == 1 {
+                    gray = -gray;
+                }
+                *p = gray.into();
+            }
+
+            let mat = fft_2d(mat, false);
+
+            let (h2, w2) = mat.dim();
+            let mut dest =
+                Mat::new_rows_cols_with_default(h2 as _, w2 as _, CV_32FC2, Scalar::all(0.0))?;
+            for ((x, y), v) in mat.indexed_iter() {
+                dest.at_2d_mut::<Vec2f>(x as _, y as _).unwrap().0 = [v.re, v.im];
+            }
+
+            Ok(dest)
         } else {
-            dft(src)
+            ensure!(
+                src.typ()? == CV_32FC2,
+                "Inverse-DFT input should be a complex matrix",
+            );
+
+            let (h, w) = (src.rows() as usize, src.cols() as usize);
+            let mut mat = Array::zeros((h, w));
+            for ((x, y), p) in mat.indexed_iter_mut() {
+                let [re, im] = src.at_2d::<Vec2f>(x as _, y as _).unwrap().0;
+                *p = C::new(re, im);
+            }
+
+            let mat = fft_2d(mat, true);
+
+            let (h2, w2) = mat.dim();
+            let mut dest =
+                Mat::new_rows_cols_with_default(h2 as _, w2 as _, CV_8UC3, Scalar::all(0.0))?;
+            for ((x, y), v) in mat.indexed_iter() {
+                let gray = (v.norm() * 256.0).max(0.0).min(255.0) as u8;
+                dest.at_2d_mut::<Vec3b>(x as _, y as _).unwrap().0 = [gray, gray, gray];
+            }
+            Ok(dest)
         }
     }
 }
 
-fn dft(src: Mat) -> Result<Mat> {
-    use opencv::{core::*, imgproc::*};
+#[derive(Debug)]
+struct FFT {
+    w: Vec<C>,
+    butterfly: Vec<usize>,
+}
 
-    // Convert to gray image first.
-    let src_u8 = if src.typ()? == CV_8U {
-        src
+impl FFT {
+    pub fn fft_size_of(n: usize) -> usize {
+        n.next_power_of_two()
+    }
+
+    pub fn init(n: usize) -> Self {
+        assert!(n.is_power_of_two());
+        let n = Self::fft_size_of(n);
+        let theta = 2.0 * std::f32::consts::PI / n as f32;
+        let w = (0..n)
+            .map(|i| C::from_polar(&1.0, &(theta * i as f32)))
+            .collect();
+
+        let mut butterfly = vec![0; n];
+        let mut j = 0;
+        for i in 1..n {
+            let mut k = n >> 1;
+            while j & k != 0 {
+                k >>= 1;
+            }
+            j = j & (k - 1) | k;
+            butterfly[i] = j;
+        }
+
+        Self { w, butterfly }
+    }
+
+    pub fn fft(&self, mut mat: ArrayViewMut1<C>, inverse: bool) {
+        let n = self.w.len();
+        let logn = n.trailing_zeros() as usize;
+        assert_eq!(mat.shape(), [n]);
+
+        // Butterfly swap
+        (0..n)
+            .filter(|&i| i < self.butterfly[i])
+            .for_each(|i| mat.swap([i], [self.butterfly[i]]));
+
+        let mut h = 1;
+        for t in (0..logn).rev() {
+            for i in (0..n).step_by(h << 1) {
+                for j in 0..h {
+                    let w = self.w[j << t];
+                    let u = mat[[i + j]];
+                    let v = mat[[i + j + h]] * if inverse { w.conj() } else { w };
+                    mat[[i + j]] = u + v;
+                    mat[[i + j + h]] = u - v;
+                }
+            }
+            h <<= 1;
+        }
+
+        let k = (1.0 / n as f32).sqrt();
+        mat.iter_mut().for_each(|x| *x *= k);
+    }
+}
+
+// Gray image only.
+pub fn fft_2d(src: Array2<C>, inverse: bool) -> Array2<C> {
+    // Expand to FFT optimal size.
+    let (n0, m0) = src.dim();
+    let (n, m) = (FFT::fft_size_of(n0), FFT::fft_size_of(m0));
+    let mut mat = Array::zeros((n, m));
+    for (i, row) in src.outer_iter().enumerate() {
+        mat.slice_mut(s![i, ..m0]).assign(&row);
+    }
+
+    let (f1, f2) = (FFT::init(n), FFT::init(m));
+    if !inverse {
+        // Run 1D-FFT for each row and then for each column.
+        for mut row in mat.outer_iter_mut() {
+            f2.fft(row.view_mut(), false);
+        }
+        let mut mat = mat.reversed_axes();
+        for mut col in mat.outer_iter_mut() {
+            f1.fft(col.view_mut(), false);
+        }
+        mat.reversed_axes()
     } else {
-        let mut gray = Mat::default()?;
-        cvt_color(&src, &mut gray, COLOR_BGR2GRAY, 0)?;
-        gray
-    };
-
-    // Extent matrix to optimal size for DFT.
-    let h2 = get_optimal_dft_size(src_u8.rows())?;
-    let w2 = get_optimal_dft_size(src_u8.cols())?;
-    log!("DFT optimal size is {}x{}", h2, w2);
-
-    // Copy to extended f32 matrix.
-    let mut src_f32 = Mat::new_rows_cols_with_default(h2, w2, CV_32FC1, Scalar::all(0.0))?;
-    for x in 0..h2 {
-        for y in 0..w2 {
-            let color = *src_u8.at_2d::<u8>(x, y).unwrap_or(&0);
-            let mut color = color as f32 / 256.0;
-            // Negate to make DFT produce low frequancy component in the middle of image
-            // instead of corners.
-            // See: https://bokjan.com/2018/11/lab-digital-image-processing.html
-            color *= if (x + y) % 2 == 0 { 1.0 } else { -1.0 };
-            *src_f32.at_2d_mut::<f32>(x, y).unwrap() = color;
+        // Run in inverse order when running inverse-FFT.
+        let mut mat = mat.reversed_axes();
+        for mut col in mat.outer_iter_mut() {
+            f1.fft(col.view_mut(), true);
         }
-    }
-
-    let mut dest_f32 = Mat::new_rows_cols_with_default(h2, w2, CV_32FC1, Scalar::all(0.0))?;
-    dft(&src_f32, &mut dest_f32, DFT_COMPLEX_OUTPUT, 0).context("dft")?;
-    Ok(dest_f32)
-}
-
-fn idft(src: Mat) -> Result<Mat> {
-    use opencv::core::*;
-    ensure!(
-        src.typ()? == CV_32FC2,
-        "IDFT input should be a complex matrix",
-    );
-    let (h, w) = (src.rows(), src.cols());
-
-    let mut dest_comp = Mat::new_rows_cols_with_default(h, w, CV_32FC2, Scalar::all(0.0))?;
-    idft(&src, &mut dest_comp, DFT_COMPLEX_OUTPUT, 0).context("idft")?;
-
-    // Convert complex matrix to gray BGR.
-    let mut dest = Mat::new_rows_cols_with_default(
-        dest_comp.rows(),
-        dest_comp.cols(),
-        CV_8UC3,
-        Scalar::all(0.0),
-    )?;
-
-    // Normalize and convert back to BGR (but gray).
-    let mut mx = std::f32::EPSILON;
-    for x in 0..dest_comp.rows() {
-        for y in 0..dest_comp.cols() {
-            let [a, b] = dest_comp.at_2d::<Vec2f>(x, y).unwrap().0;
-            mx = mx.max(a.hypot(b));
+        let mut mat = mat.reversed_axes();
+        for mut row in mat.outer_iter_mut() {
+            f2.fft(row.view_mut(), true);
         }
+        mat
     }
-    for x in 0..dest_comp.rows() {
-        for y in 0..dest_comp.cols() {
-            let [a, b] = dest_comp.at_2d::<Vec2f>(x, y).unwrap().0;
-            // `hypot` eats the sign, so the negation done above will not affect the result.
-            let gray = (a.hypot(b) / mx * 256.0) as u8;
-            *dest.at_2d_mut::<Vec3b>(x, y).unwrap() = Vec3b::all(gray);
-        }
-    }
-    Ok(dest)
 }
