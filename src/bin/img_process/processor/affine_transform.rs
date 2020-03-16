@@ -53,7 +53,7 @@ fn affine_trans(src: Array3<f32>, scale: f32, rotate: f32) -> Array3<f32> {
         .dot(&get_translate_mat(-(h2 as f32 / 2.0), -(w2 as f32 / 2.0)));
 
     let mut dest = Array::zeros((h2, w2, 3));
-    for ((dest_x, dest_y, col), v) in dest.indexed_iter_mut() {
+    ndarray::Zip::indexed(&mut dest).par_apply(|(dest_x, dest_y, col), v| {
         // Slow: Result matrix is on heap.
         // let src_pt = inv_trans_mat.dot(&array![[dest_x as f32], [dest_y as f32], [1.]]);
         // let (x, y) = (src_pt[[0, 0]], src_pt[[1, 0]]);
@@ -78,7 +78,7 @@ fn affine_trans(src: Array3<f32>, scale: f32, rotate: f32) -> Array3<f32> {
             xsamples[i as usize] = interpolate3(ysamples, y - y_ as f32);
         }
         *v = interpolate3(xsamples, x - x_ as f32);
-    }
+    });
 
     dest
 }

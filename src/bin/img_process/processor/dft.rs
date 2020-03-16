@@ -2,6 +2,7 @@ use crate::util::{Image, Result};
 use gtk::Builder;
 use ndarray::prelude::*;
 use num_complex::Complex32 as C;
+use rayon::prelude::*;
 use std::any::Any;
 
 pub struct DFT;
@@ -126,24 +127,32 @@ pub fn fft_2d(src: Array2<C>, inverse: bool) -> Array2<C> {
     let (f1, f2) = (FFT::init(n), FFT::init(m));
     if !inverse {
         // Run 1D-FFT for each row and then for each column.
-        for mut row in mat.outer_iter_mut() {
-            f2.fft(row.view_mut(), false);
-        }
+        mat.axis_iter_mut(Axis(0))
+            .into_par_iter()
+            .for_each(|mut row| {
+                f2.fft(row.view_mut(), false);
+            });
         let mut mat = mat.reversed_axes();
-        for mut col in mat.outer_iter_mut() {
-            f1.fft(col.view_mut(), false);
-        }
+        mat.axis_iter_mut(Axis(0))
+            .into_par_iter()
+            .for_each(|mut col| {
+                f1.fft(col.view_mut(), false);
+            });
         mat.reversed_axes()
     } else {
         // Run in inverse order when running inverse-FFT.
         let mut mat = mat.reversed_axes();
-        for mut col in mat.outer_iter_mut() {
-            f1.fft(col.view_mut(), true);
-        }
+        mat.axis_iter_mut(Axis(0))
+            .into_par_iter()
+            .for_each(|mut col| {
+                f1.fft(col.view_mut(), true);
+            });
         let mut mat = mat.reversed_axes();
-        for mut row in mat.outer_iter_mut() {
-            f2.fft(row.view_mut(), true);
-        }
+        mat.axis_iter_mut(Axis(0))
+            .into_par_iter()
+            .for_each(|mut row| {
+                f2.fft(row.view_mut(), true);
+            });
         mat
     }
 }

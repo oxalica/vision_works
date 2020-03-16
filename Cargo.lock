@@ -511,6 +511,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "rawpointer",
+ "rayon",
 ]
 
 [[package]]
@@ -876,6 +877,7 @@ dependencies = [
  "opencv",
  "rand",
  "rand_distr",
+ "rayon",
 ]
 
 [[package]]
