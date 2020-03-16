@@ -1,5 +1,6 @@
 use crate::{ext::BuilderExtManualExt as _, Result};
 use gtk::{prelude::*, Builder};
+use ndarray::prelude::*;
 use opencv::prelude::*;
 use std::any::Any;
 
@@ -25,8 +26,8 @@ impl super::ImageProcessor for AffineTransform {
             "on_affine_trans_run" => Some(Box::new(move || {
                 let scale: gtk::Scale = builder.object("scl_affine_trans_scale");
                 let rotate: gtk::Scale = builder.object("scl_affine_trans_rotate");
-                let scale = scale.get_value();
-                let rotate = rotate.get_value();
+                let scale = scale.get_value() as f32;
+                let rotate = rotate.get_value() as f32;
                 log!("Affine transform with scale={} rotate={}", scale, rotate);
                 run(Box::new((scale, rotate)));
             })),
@@ -35,40 +36,142 @@ impl super::ImageProcessor for AffineTransform {
     }
 
     fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat> {
-        use opencv::{
-            core::{Point2f, Scalar, BORDER_CONSTANT},
-            imgproc::*,
-        };
+        use opencv::core::{Scalar, Vec3b, CV_8UC3};
+        let (scale, rotate): (f32, f32) = *args.downcast_ref().unwrap();
+        let rotate = rotate.to_radians();
 
-        let (scale, rotate): (f64, f64) = *args.downcast_ref().unwrap();
-        let (h, w) = (src.rows() as f64, src.cols() as f64);
-        let (s, c) = (rotate.to_radians().sin(), rotate.to_radians().cos());
+        let (h, w) = (src.rows() as usize, src.cols() as usize);
+        let mut mat = Array::zeros((h, w, 3));
+        for x in 0..h {
+            for y in 0..w {
+                let [b, g, r] = src.at_2d::<Vec3b>(x as _, y as _).unwrap().0;
+                mat[[x, y, 0]] = r as f32 / 256.0;
+                mat[[x, y, 1]] = g as f32 / 256.0;
+                mat[[x, y, 2]] = b as f32 / 256.0;
+            }
+        }
 
-        let mut trans_mat =
-            get_rotation_matrix_2d(Point2f::new(w as f32 / 2.0, h as f32 / 2.0), rotate, scale)?;
-        let (h2, w2) = (
-            (c * h - s * w).abs().max((c * h + s * w).abs()) * scale,
-            (s * h + c * w).abs().max((s * h - c * w).abs()) * scale,
-        );
-        *trans_mat.at_2d_mut::<f64>(0, 2).unwrap() += (w2 - w) / 2.0;
-        *trans_mat.at_2d_mut::<f64>(1, 2).unwrap() += (h2 - h) / 2.0;
+        let mat = affine_trans(mat, scale, rotate);
+        let (h2, w2, _) = mat.dim();
 
-        let mut dest = Mat::new_rows_cols_with_default(
-            h2.round() as _,
-            w2.round() as _,
-            src.typ()?,
-            Scalar::all(0.0),
-        )?;
-        let dsize = dest.size()?;
-        warp_affine(
-            &src,
-            &mut dest,
-            &trans_mat,
-            dsize,
-            INTER_CUBIC,
-            BORDER_CONSTANT,
-            Scalar::all(0.0),
-        )?;
+        let mut dest =
+            Mat::new_rows_cols_with_default(h2 as _, w2 as _, CV_8UC3, Scalar::all(0.0))?;
+        for x in 0..h2 {
+            for y in 0..w2 {
+                let [r, g, b] = [mat[[x, y, 0]], mat[[x, y, 1]], mat[[x, y, 2]]];
+                dest.at_2d_mut::<Vec3b>(x as _, y as _).unwrap().0 = [
+                    (b * 256.0).max(0.0).min(255.0) as u8,
+                    (g * 256.0).max(0.0).min(255.0) as u8,
+                    (r * 256.0).max(0.0).min(255.0) as u8,
+                ];
+            }
+        }
         Ok(dest)
+    }
+}
+
+fn affine_trans(src: Array3<f32>, scale: f32, rotate: f32) -> Array3<f32> {
+    let (h, w, _) = src.dim();
+    let (h2, w2) = get_size_after_affine_trans(h, w, scale, rotate);
+
+    // Inverse matrix. So we can get source points for each destination points.
+    let inv_trans_mat = get_translate_mat(h as f32 / 2.0, w as f32 / 2.0)
+        .dot(&get_rotation_mat(-rotate))
+        .dot(&get_scale_mat(1.0 / scale))
+        .dot(&get_translate_mat(-(h2 as f32 / 2.0), -(w2 as f32 / 2.0)));
+
+    let mut dest = Array::zeros((h2, w2, 3));
+    for dest_x in 0..h2 {
+        for dest_y in 0..w2 {
+            let src_pt = inv_trans_mat.dot(&array![[dest_x as f32], [dest_y as f32], [1.]]);
+            let (x, y) = (src_pt[[0, 0]], src_pt[[1, 0]]);
+            // Top-left corner of neighborhood.
+            let (x_, y_) = (x.floor() as isize - 1, y.floor() as isize - 1);
+
+            for col in 0..3 {
+                let mut xsamples = [0.0; 4];
+                for i in 0..4 {
+                    let mut ysamples = [0.0; 4];
+                    for j in 0..4 {
+                        // Treat neighbor pixels out of image as black.
+                        if 0 <= x_ + i && x_ + i < h as _ && 0 <= y_ + j && y_ + j < w as _ {
+                            ysamples[j as usize] = src[[(x_ + i) as _, (y_ + j) as _, col]];
+                        }
+                    }
+                    xsamples[i as usize] = interpolate3(ysamples, y - y_ as f32);
+                }
+                let sample = interpolate3(xsamples, x - x_ as f32);
+                dest[[dest_x, dest_y, col]] = sample;
+            }
+        }
+    }
+
+    dest
+}
+
+fn get_size_after_affine_trans(h: usize, w: usize, scale: f32, rotate: f32) -> (usize, usize) {
+    let rot_mat = get_rotation_mat(rotate).dot(&get_scale_mat(scale));
+    // Transform two border points to locate the result rectangle.
+    let p1 = rot_mat.dot(&array![[h as f32], [w as f32], [1.]]);
+    let p2 = rot_mat.dot(&array![[h as f32], [-(w as f32)], [1.]]);
+    let h2 = p1[[0, 0]].abs().max(p2[[0, 0]].abs());
+    let w2 = p1[[1, 0]].abs().max(p2[[1, 0]].abs());
+    (h2.round() as usize, w2.round() as usize)
+}
+
+#[rustfmt::skip]
+fn get_rotation_mat(th: f32) -> Array2<f32> {
+    let (s, c) = (th.sin(), th.cos());
+    array![
+        [ c, -s , 0.],
+        [ s,  c , 0.],
+        [ 0., 0., 1.],
+    ]
+}
+
+#[rustfmt::skip]
+fn get_translate_mat(x: f32, y: f32) -> Array2<f32> {
+    array![
+        [ 1., 0., x ],
+        [ 0., 1., y ],
+        [ 0., 0., 1.],
+    ]
+}
+
+#[rustfmt::skip]
+fn get_scale_mat(scale: f32) -> Array2<f32> {
+    array![
+        [ scale,    0., 0.],
+        [    0., scale, 0.],
+        [    0.,    0., 1.],
+    ]
+}
+
+#[rustfmt::skip]
+fn interpolate3(y: [f32; 4], tx: f32) -> f32 {
+    let x = [0.0, 1.0, 2.0, 3.0];
+      (tx - x[1]) * (tx - x[2]) * (tx - x[3]) / ((x[0] - x[1]) * (x[0] - x[2]) * (x[0] - x[3])) * y[0]
+    + (tx - x[0]) * (tx - x[2]) * (tx - x[3]) / ((x[1] - x[0]) * (x[1] - x[2]) * (x[1] - x[3])) * y[1]
+    + (tx - x[0]) * (tx - x[1]) * (tx - x[3]) / ((x[2] - x[0]) * (x[2] - x[1]) * (x[2] - x[3])) * y[2]
+    + (tx - x[0]) * (tx - x[1]) * (tx - x[2]) / ((x[3] - x[0]) * (x[3] - x[1]) * (x[3] - x[2])) * y[3]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rotation_mat() {
+        let pt1 = array![[3.0f32.sqrt()], [1.0], [1.0]];
+        let pt2 = array![[0.0], [2.0], [1.0]];
+        let dt = get_rotation_mat(std::f32::consts::PI / 3.0).dot(&pt1) - pt2;
+        assert!(dt.iter().all(|x| x.abs() < 1e-5));
+    }
+
+    #[test]
+    fn test_interpolate3() {
+        assert!((interpolate3([0.0, 1.0, 2.0, 3.0], 1.5) - 1.5).abs() < 1e-5);
+        assert!((interpolate3([0.0, 1.0, 4.0, 9.0], -2.0) - 4.0).abs() < 1e-5);
+        assert!((interpolate3([0.0, 1.0, 8.0, 27.0], -4.0) - -64.0).abs() < 1e-5);
     }
 }
