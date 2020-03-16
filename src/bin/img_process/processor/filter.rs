@@ -154,5 +154,30 @@ fn wiener_filter(src: Array3<f32>, neighbor: usize) -> Array3<f32> {
 }
 
 fn bilateral_filter(src: Array3<f32>, neighbor: usize, sigma_d: f32, sigma_r: f32) -> Array3<f32> {
-    todo!()
+    let (h, w, ncol) = src.dim();
+    assert_eq!(ncol, 3);
+    assert!(neighbor <= h && neighbor <= w);
+    let (h2, w2) = (h - neighbor, w - neighbor);
+    let mid = neighbor / 2;
+
+    let mut dest = Array::zeros((h2, w2, 3));
+    for ((x, y, col), v) in dest.indexed_iter_mut() {
+        let (mut sum, mut wsum) = (0.0, 0.0);
+        for i in 0..neighbor {
+            for j in 0..neighbor {
+                let dd = ((i as f32 - mid as f32).powi(2) + (j as f32 - mid as f32).powi(2))
+                    / (2.0 * sigma_d.powi(2));
+                let dr = (src[[x + i, y + j, col]] - src[[x + mid, y + mid, col]])
+                    .abs()
+                    .powi(2)
+                    / (2.0 * sigma_r.powi(2));
+                let w = (-dd - dr).exp();
+                wsum += w;
+                sum += src[[x + i, y + j, col]] * w;
+            }
+        }
+        *v = sum / wsum;
+    }
+
+    dest
 }
