@@ -27,7 +27,6 @@ impl super::ImageProcessor for AffineTransform {
                 let rotate: gtk::Scale = builder.object("scl_affine_trans_rotate");
                 let scale = scale.get_value() as f32;
                 let rotate = rotate.get_value() as f32;
-                log!("Affine transform with scale={} rotate={}", scale, rotate);
                 run(Box::new((scale, rotate)));
             })),
             _ => None,

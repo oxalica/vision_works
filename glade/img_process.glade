@@ -10,31 +10,31 @@
   </object>
   <object class="GtkAdjustment" id="adj_affine_trans_scale">
     <property name="lower">0.25</property>
-    <property name="upper">4</property>
+    <property name="upper">2</property>
     <property name="value">1</property>
     <property name="step_increment">0.20000000000000001</property>
     <property name="page_increment">1</property>
   </object>
   <object class="GtkAdjustment" id="adj_filter_bilateral_sigma_d">
-    <property name="lower">1</property>
-    <property name="upper">100</property>
-    <property name="value">5</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">0.01</property>
+    <property name="upper">1</property>
+    <property name="value">0.10000000000000001</property>
+    <property name="step_increment">0.050000000000000003</property>
+    <property name="page_increment">0.20000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="adj_filter_bilateral_sigma_r">
-    <property name="lower">1</property>
-    <property name="upper">100</property>
-    <property name="value">5</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">0.01</property>
+    <property name="upper">1</property>
+    <property name="value">0.10000000000000001</property>
+    <property name="step_increment">0.050000000000000003</property>
+    <property name="page_increment">0.20000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="adj_filter_gauss_sigma">
-    <property name="lower">1</property>
-    <property name="upper">128</property>
-    <property name="value">5</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">0.01</property>
+    <property name="upper">1</property>
+    <property name="value">0.10000000000000001</property>
+    <property name="step_increment">0.050000000000000003</property>
+    <property name="page_increment">0.20000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="adj_filter_neighbor">
     <property name="lower">3</property>
@@ -44,17 +44,17 @@
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="adj_noise_mu">
-    <property name="lower">-256</property>
-    <property name="upper">256</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">-1</property>
+    <property name="upper">1</property>
+    <property name="step_increment">0.050000000000000003</property>
+    <property name="page_increment">0.20000000000000001</property>
   </object>
   <object class="GtkAdjustment" id="adj_noise_sigma">
-    <property name="lower">1</property>
-    <property name="upper">128</property>
-    <property name="value">5</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
+    <property name="lower">0.01</property>
+    <property name="upper">1</property>
+    <property name="value">0.10000000000000001</property>
+    <property name="step_increment">0.050000000000000003</property>
+    <property name="page_increment">0.20000000000000001</property>
   </object>
   <object class="GtkFileFilter" id="flt_image">
     <mime-types>
@@ -80,55 +80,6 @@
         <property name="margin_top">4</property>
         <property name="margin_bottom">4</property>
         <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkGrid">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <child>
-              <object class="GtkLabel">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Input image: </property>
-              </object>
-              <packing>
-                <property name="left_attach">0</property>
-                <property name="top_attach">0</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkFileChooserButton" id="file_input">
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="hexpand">True</property>
-                <property name="filter">flt_image</property>
-                <property name="title" translatable="yes"/>
-                <signal name="file-set" handler="on_select_source_file" swapped="no"/>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">0</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton">
-                <property name="label" translatable="yes">Reload</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-                <signal name="clicked" handler="on_reload_input" swapped="no"/>
-              </object>
-              <packing>
-                <property name="left_attach">2</property>
-                <property name="top_attach">0</property>
-              </packing>
-            </child>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
         <child>
           <object class="GtkNotebook">
             <property name="visible">True</property>
@@ -293,7 +244,7 @@
                   <packing>
                     <property name="left_attach">0</property>
                     <property name="top_attach">0</property>
-                    <property name="width">4</property>
+                    <property name="width">3</property>
                   </packing>
                 </child>
                 <child>
@@ -327,6 +278,7 @@
                     <property name="hexpand">True</property>
                     <property name="adjustment">adj_noise_mu</property>
                     <property name="round_digits">1</property>
+                    <property name="digits">2</property>
                     <property name="value_pos">left</property>
                   </object>
                   <packing>
@@ -340,26 +292,12 @@
                     <property name="can_focus">True</property>
                     <property name="adjustment">adj_noise_sigma</property>
                     <property name="round_digits">1</property>
+                    <property name="digits">2</property>
                     <property name="value_pos">left</property>
                   </object>
                   <packing>
                     <property name="left_attach">1</property>
                     <property name="top_attach">2</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkButton">
-                    <property name="label">gtk-discard</property>
-                    <property name="visible">True</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">True</property>
-                    <property name="use_stock">True</property>
-                    <signal name="clicked" handler="on_noise_gauss_reset" swapped="no"/>
-                  </object>
-                  <packing>
-                    <property name="left_attach">2</property>
-                    <property name="top_attach">1</property>
-                    <property name="height">2</property>
                   </packing>
                 </child>
                 <child>
@@ -372,7 +310,7 @@
                     <signal name="clicked" handler="on_noise_gauss_run" swapped="no"/>
                   </object>
                   <packing>
-                    <property name="left_attach">3</property>
+                    <property name="left_attach">2</property>
                     <property name="top_attach">1</property>
                     <property name="height">2</property>
                   </packing>
@@ -394,10 +332,10 @@
               </packing>
             </child>
             <child>
-              <object class="GtkBox">
+              <object class="GtkGrid">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="orientation">vertical</property>
+                <property name="column_homogeneous">True</property>
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
@@ -407,7 +345,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="halign">end</property>
-                        <property name="label" translatable="yes">Neighbor (odd):</property>
+                        <property name="label" translatable="yes">Neighbor (shoud be odd):</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -433,9 +371,9 @@
                     </child>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">0</property>
+                    <property name="left_attach">0</property>
+                    <property name="top_attach">0</property>
+                    <property name="width">2</property>
                   </packing>
                 </child>
                 <child>
@@ -473,6 +411,7 @@
                                 <property name="hexpand">True</property>
                                 <property name="adjustment">adj_filter_gauss_sigma</property>
                                 <property name="round_digits">0</property>
+                                <property name="digits">2</property>
                                 <property name="value_pos">left</property>
                               </object>
                               <packing>
@@ -509,9 +448,8 @@
                     </child>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="left_attach">0</property>
+                    <property name="top_attach">1</property>
                   </packing>
                 </child>
                 <child>
@@ -533,7 +471,7 @@
                               <object class="GtkLabel">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">σ(d): </property>
+                                <property name="label" translatable="yes">σd: </property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -544,7 +482,7 @@
                               <object class="GtkLabel">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">σ(r): </property>
+                                <property name="label" translatable="yes">σr: </property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -558,6 +496,7 @@
                                 <property name="hexpand">True</property>
                                 <property name="adjustment">adj_filter_bilateral_sigma_d</property>
                                 <property name="round_digits">1</property>
+                                <property name="digits">2</property>
                                 <property name="value_pos">left</property>
                               </object>
                               <packing>
@@ -571,6 +510,7 @@
                                 <property name="can_focus">True</property>
                                 <property name="adjustment">adj_filter_bilateral_sigma_r</property>
                                 <property name="round_digits">1</property>
+                                <property name="digits">2</property>
                                 <property name="value_pos">left</property>
                               </object>
                               <packing>
@@ -606,9 +546,8 @@
                     </child>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">2</property>
+                    <property name="left_attach">1</property>
+                    <property name="top_attach">1</property>
                   </packing>
                 </child>
                 <child>
@@ -645,9 +584,9 @@
                     </child>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">3</property>
+                    <property name="left_attach">0</property>
+                    <property name="top_attach">2</property>
+                    <property name="width">2</property>
                   </packing>
                 </child>
               </object>
@@ -702,7 +641,7 @@
               </object>
               <packing>
                 <property name="left_attach">0</property>
-                <property name="top_attach">0</property>
+                <property name="top_attach">1</property>
               </packing>
             </child>
             <child>
@@ -730,7 +669,7 @@
               </object>
               <packing>
                 <property name="left_attach">2</property>
-                <property name="top_attach">0</property>
+                <property name="top_attach">1</property>
               </packing>
             </child>
             <child>
@@ -758,8 +697,75 @@
               </object>
               <packing>
                 <property name="left_attach">1</property>
+                <property name="top_attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="halign">start</property>
+                <property name="label" translatable="yes">Output: </property>
+              </object>
+              <packing>
+                <property name="left_attach">2</property>
                 <property name="top_attach">0</property>
               </packing>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Input: </property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkFileChooserButton" id="file_input">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="hexpand">True</property>
+                    <property name="filter">flt_image</property>
+                    <property name="title" translatable="yes"/>
+                    <signal name="file-set" handler="on_select_source_file" swapped="no"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton">
+                    <property name="label" translatable="yes">Reload</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <signal name="clicked" handler="on_reload_input" swapped="no"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="left_attach">0</property>
+                <property name="top_attach">0</property>
+              </packing>
+            </child>
+            <child>
+              <placeholder/>
             </child>
           </object>
           <packing>

@@ -13,14 +13,6 @@ impl super::ImageProcessor for Noise {
     ) -> Option<Box<dyn Fn() + 'static>> {
         let builder = builder.clone();
         match handler_name {
-            "on_noise_gauss_reset" => Some(Box::new(move || {
-                builder
-                    .object::<gtk::Scale>("scl_noise_gauss_mu")
-                    .set_value(0.0);
-                builder
-                    .object::<gtk::Scale>("scl_noise_gauss_sigma")
-                    .set_value(0.0);
-            })),
             "on_noise_gauss_run" => Some(Box::new(move || {
                 let mu = builder
                     .object::<gtk::Scale>("scl_noise_gauss_mu")

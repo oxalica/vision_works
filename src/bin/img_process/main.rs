@@ -24,12 +24,14 @@ static GUI_EVENT_TX: OnceCell<glib::Sender<GuiEvent>> = OnceCell::new();
 enum GuiEvent {
     Log(String),
     ImageOutput(Image),
+    WorkerError,
 }
 
 #[derive(Debug, Default)]
 struct GuiState {
     image_input: Option<Image>,
     image_output: Option<Image>,
+    processing: bool,
 }
 
 fn main() {
@@ -77,7 +79,12 @@ fn on_gui_event(builder: &Builder, state: &Rc<RefCell<GuiState>>, event: GuiEven
             builder
                 .object::<gtk::Image>("img_output")
                 .set_from_pixbuf(Some(&img.render()));
-            state.borrow_mut().image_output = Some(img);
+            let mut st = state.borrow_mut();
+            st.image_output = Some(img);
+            st.processing = false;
+        }
+        GuiEvent::WorkerError => {
+            state.borrow_mut().processing = false;
         }
     }
 }
@@ -98,13 +105,26 @@ fn resolve_handler(
 ) -> Box<dyn Fn(&[Value]) -> Option<Value> + 'static> {
     let builder = builder.clone();
     let state = state.clone();
+    let state_ = state.clone();
+    let check_processing = move || {
+        if state_.borrow().processing {
+            log!("Error: Anothing job is running. Please wait.");
+            true
+        } else {
+            false
+        }
+    };
     match handler_name {
         "on_select_source_file" => Box::new(move |_| {
-            on_select_source_file(&builder, &state);
+            if !check_processing() {
+                on_select_source_file(&builder, &state);
+            }
             None
         }),
         "on_reload_input" => Box::new(move |_| {
-            on_select_source_file(&builder, &state);
+            if !check_processing() {
+                on_select_source_file(&builder, &state);
+            }
             None
         }),
         "on_clear_log" => Box::new(move |_| {
@@ -113,6 +133,9 @@ fn resolve_handler(
             None
         }),
         "on_swap_img" => Box::new(move |_| {
+            if check_processing() {
+                return None;
+            }
             let st = &mut *state.borrow_mut();
             std::mem::swap(&mut st.image_input, &mut st.image_output);
             let img1: gtk::Image = builder.object("img_input");
@@ -124,10 +147,11 @@ fn resolve_handler(
         }),
         _ => {
             for pro in processors {
+                let builder_ = builder.clone();
                 let pro_ = pro.clone();
-                let state = state.clone();
+                let state_ = state.clone();
                 let run = Box::new(move |args| {
-                    processor_runner(pro_.clone(), args, state.clone());
+                    processor_runner(&builder_, &state_, pro_.clone(), args);
                 });
                 if let Some(h) = pro.register_handler(&builder, handler_name, run) {
                     return Box::new(move |_| {
@@ -142,11 +166,23 @@ fn resolve_handler(
 }
 
 fn processor_runner(
+    builder: &Builder,
+    state: &Rc<RefCell<GuiState>>,
     pro: Arc<dyn ImageProcessor>,
     args: Box<dyn std::any::Any + Send>,
-    state: Rc<RefCell<GuiState>>,
 ) {
-    let img = match state.borrow().image_input.clone() {
+    let mut st = state.borrow_mut();
+    if st.processing {
+        log!("Error: Anothing job is running. Please wait.");
+        return;
+    }
+
+    // Clear output buffer.
+    builder
+        .object::<gtk::Image>("img_output")
+        .set_from_pixbuf(None);
+
+    let img = match st.image_input.clone() {
         Some(img) => img,
         None => {
             log!("Error: No input image");
@@ -154,14 +190,20 @@ fn processor_runner(
         }
     };
 
-    std::thread::spawn(move || {
-        log!("Running processor...");
+    st.processing = true;
+    log!("Running processor...");
+
+    let worker_handle = std::thread::spawn(move || {
         let t = std::time::Instant::now();
         let ret = pro.run(args, img);
         let ns = t.elapsed().as_nanos();
-        match ret {
-            Err(err) => log!("Failed: {}", err),
-            Ok(ret_img) => {
+        (ret, ns)
+    });
+
+    // Watching dog
+    std::thread::spawn(move || {
+        match worker_handle.join() {
+            Ok((Ok(ret_img), ns)) => {
                 GUI_EVENT_TX
                     .get()
                     .unwrap()
@@ -173,9 +215,19 @@ fn processor_runner(
                     ns / 1_000_000 % 1_000,
                     ns / 1_000 % 1_000,
                     ns / 1 % 1_000,
-                )
+                );
+                return;
+            }
+            Ok((Err(err), _)) => log!("Failed: {}", err),
+            Err(err) => {
+                log!("Worker panicked: {:?}", err);
             }
         }
+        GUI_EVENT_TX
+            .get()
+            .unwrap()
+            .send(GuiEvent::WorkerError)
+            .unwrap();
     });
 }
 
