@@ -1,7 +1,6 @@
-use crate::{ext::BuilderExtManualExt as _, Result};
+use crate::util::{BuilderExtManualExt as _, Image, Result};
 use failure::ensure;
 use gtk::{prelude::*, Builder};
-use opencv::{core::*, prelude::*};
 use std::any::Any;
 
 pub struct Filter;
@@ -56,18 +55,20 @@ impl super::ImageProcessor for Filter {
         }
     }
 
-    fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat> {
+    fn run(&self, args: Box<dyn Any + Send>, src: Image) -> Result<Image> {
         type Ty = (FilterType, i32, f32, f32, f32);
         let (filter_ty, neighbor, gauss_sigma, bila_sigma_d, bila_sigma_r): Ty =
             *args.downcast_ref().unwrap();
-        match filter_ty {
-            FilterType::Box => box_filter(src, neighbor),
-            FilterType::Gaussian => gauss_filter(src, neighbor, gauss_sigma),
-            FilterType::Wiener => wiener_filter(src, neighbor),
-            FilterType::Bilateral => bilateral_filter(src, neighbor, bila_sigma_d, bila_sigma_r),
-        }
+        // match filter_ty {
+        //     FilterType::Box => box_filter(src, neighbor),
+        //     FilterType::Gaussian => gauss_filter(src, neighbor, gauss_sigma),
+        //     FilterType::Wiener => wiener_filter(src, neighbor),
+        //     FilterType::Bilateral => bilateral_filter(src, neighbor, bila_sigma_d, bila_sigma_r),
+        // }
+        todo!()
     }
 }
+/*
 
 /// Kernel:
 /// K(x, y) = A * 1
@@ -146,3 +147,4 @@ fn wiener_filter(src: Mat, neighbor: i32) -> Result<Mat> {
 fn bilateral_filter(src: Mat, neighbor: i32, sigma_d: f32, sigma_r: f32) -> Result<Mat> {
     todo!()
 }
+*/

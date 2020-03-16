@@ -1,7 +1,6 @@
-use crate::{ext::BuilderExtManualExt as _, Result};
+use crate::util::{BuilderExtManualExt as _, Image, Result};
 use gtk::{prelude::*, Builder};
 use ndarray::prelude::*;
-use opencv::prelude::*;
 use std::any::Any;
 
 pub struct AffineTransform;
@@ -35,38 +34,12 @@ impl super::ImageProcessor for AffineTransform {
         }
     }
 
-    fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat> {
-        use opencv::core::{Scalar, Vec3b, CV_8UC3};
+    fn run(&self, args: Box<dyn Any + Send>, src: Image) -> Result<Image> {
         let (scale, rotate): (f32, f32) = *args.downcast_ref().unwrap();
         let rotate = rotate.to_radians();
-
-        let (h, w) = (src.rows() as usize, src.cols() as usize);
-        let mut mat = Array::zeros((h, w, 3));
-        for x in 0..h {
-            for y in 0..w {
-                let [b, g, r] = src.at_2d::<Vec3b>(x as _, y as _).unwrap().0;
-                mat[[x, y, 0]] = r as f32 / 256.0;
-                mat[[x, y, 1]] = g as f32 / 256.0;
-                mat[[x, y, 2]] = b as f32 / 256.0;
-            }
-        }
-
-        let mat = affine_trans(mat, scale, rotate);
-        let (h2, w2, _) = mat.dim();
-
-        let mut dest =
-            Mat::new_rows_cols_with_default(h2 as _, w2 as _, CV_8UC3, Scalar::all(0.0))?;
-        for x in 0..h2 {
-            for y in 0..w2 {
-                let [r, g, b] = [mat[[x, y, 0]], mat[[x, y, 1]], mat[[x, y, 2]]];
-                dest.at_2d_mut::<Vec3b>(x as _, y as _).unwrap().0 = [
-                    (b * 256.0).max(0.0).min(255.0) as u8,
-                    (g * 256.0).max(0.0).min(255.0) as u8,
-                    (r * 256.0).max(0.0).min(255.0) as u8,
-                ];
-            }
-        }
-        Ok(dest)
+        let src = src.expect_normal()?;
+        let dest = affine_trans(src, scale, rotate);
+        Ok(Image::Normal(dest))
     }
 }
 

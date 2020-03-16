@@ -1,6 +1,5 @@
-use crate::Result;
+use crate::util::{Image, Result};
 use gtk::Builder;
-use opencv::prelude::Mat;
 use std::{any::Any, sync::Arc};
 
 mod affine_transform;
@@ -16,7 +15,7 @@ pub trait ImageProcessor: Send + Sync {
         run: Box<dyn Fn(Box<dyn Any + Send>) + 'static>,
     ) -> Option<Box<dyn Fn() + 'static>>;
 
-    fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat>;
+    fn run(&self, args: Box<dyn Any + Send>, src: Image) -> Result<Image>;
 }
 
 pub fn load_processors() -> Vec<Arc<dyn ImageProcessor>> {

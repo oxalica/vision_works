@@ -1,9 +1,7 @@
-use crate::Result;
-use failure::ensure;
+use crate::util::{Image, Result};
 use gtk::Builder;
 use ndarray::prelude::*;
 use num_complex::Complex32 as C;
-use opencv::prelude::*;
 use std::any::Any;
 
 pub struct DFT;
@@ -22,59 +20,42 @@ impl super::ImageProcessor for DFT {
         }
     }
 
-    fn run(&self, args: Box<dyn Any + Send>, src: Mat) -> Result<Mat> {
-        use opencv::core::*;
+    fn run(&self, args: Box<dyn Any + Send>, src: Image) -> Result<Image> {
         let inverse: bool = *args.downcast_ref().unwrap();
         if !inverse {
-            ensure!(src.typ()? == CV_8UC3, "DFT input should be a normal image");
+            let src = src.expect_normal()?;
+            let (h, w, _) = src.dim();
 
             // Convert to complex grayscale image.
-            let (h, w) = (src.rows() as usize, src.cols() as usize);
-            let mut mat: Array2<C> = Array::zeros((h, w));
-            for ((x, y), p) in mat.indexed_iter_mut() {
-                let [b, g, r] = src.at_2d::<Vec3b>(x as _, y as _).unwrap().0;
-                let mut gray =
-                    0.299 * b as f32 / 256.0 + 0.587 * g as f32 / 256.0 + 0.114 * r as f32 / 256.0;
+            let mut src_gray = Array::zeros((h, w));
+            for ((x, y), v) in src_gray.indexed_iter_mut() {
+                let (r, g, b) = (src[[x, y, 0]], src[[x, y, 1]], src[[x, y, 2]]);
+                let mut gray = 0.299 * b as f32 + 0.587 * g as f32 + 0.114 * r as f32;
                 // FFT shift
                 if (x + y) % 2 == 1 {
                     gray = -gray;
                 }
-                *p = gray.into();
+                *v = gray.into();
             }
 
-            let mat = fft_2d(mat, false);
-
-            let (h2, w2) = mat.dim();
-            let mut dest =
-                Mat::new_rows_cols_with_default(h2 as _, w2 as _, CV_32FC2, Scalar::all(0.0))?;
-            for ((x, y), v) in mat.indexed_iter() {
-                dest.at_2d_mut::<Vec2f>(x as _, y as _).unwrap().0 = [v.re, v.im];
-            }
-
-            Ok(dest)
+            let dest_comp = fft_2d(src_gray, false);
+            Ok(Image::Complex(dest_comp))
         } else {
-            ensure!(
-                src.typ()? == CV_32FC2,
-                "Inverse-DFT input should be a complex matrix",
-            );
+            let src_comp = src.expect_complex()?;
+            let dest_comp = fft_2d(src_comp, true);
 
-            let (h, w) = (src.rows() as usize, src.cols() as usize);
-            let mut mat = Array::zeros((h, w));
-            for ((x, y), p) in mat.indexed_iter_mut() {
-                let [re, im] = src.at_2d::<Vec2f>(x as _, y as _).unwrap().0;
-                *p = C::new(re, im);
+            let (h, w) = dest_comp.dim();
+            // FIXME: Change to `Array::from_shape_fn`
+            let mut dest = Array::zeros((h, w, 3));
+            for x in 0..h {
+                for y in 0..w {
+                    let gray = dest_comp[[x, y]].norm();
+                    dest[[x, y, 0]] = gray;
+                    dest[[x, y, 1]] = gray;
+                    dest[[x, y, 2]] = gray;
+                }
             }
-
-            let mat = fft_2d(mat, true);
-
-            let (h2, w2) = mat.dim();
-            let mut dest =
-                Mat::new_rows_cols_with_default(h2 as _, w2 as _, CV_8UC3, Scalar::all(0.0))?;
-            for ((x, y), v) in mat.indexed_iter() {
-                let gray = (v.norm() * 256.0).max(0.0).min(255.0) as u8;
-                dest.at_2d_mut::<Vec3b>(x as _, y as _).unwrap().0 = [gray, gray, gray];
-            }
-            Ok(dest)
+            Ok(Image::Normal(dest))
         }
     }
 }

@@ -1,10 +1,9 @@
-use failure::{bail, Error, ResultExt as _};
+use failure::ResultExt as _;
 use gio::prelude::*;
 use glib::value::Value;
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Builder};
 use once_cell::sync::OnceCell;
-use opencv::prelude::*;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 macro_rules! log {
@@ -13,12 +12,10 @@ macro_rules! log {
     };
 }
 
-mod ext;
 mod processor;
-use ext::{BuilderExtManualExt as _, OptionExt as _};
+mod util;
 use processor::{load_processors, ImageProcessor};
-
-type Result<T> = std::result::Result<T, Error>;
+use util::{BuilderExtManualExt as _, Image};
 
 const GLADE_SRC_PATH: &str = "glade/img_process.glade";
 static GUI_EVENT_TX: OnceCell<glib::Sender<GuiEvent>> = OnceCell::new();
@@ -26,13 +23,13 @@ static GUI_EVENT_TX: OnceCell<glib::Sender<GuiEvent>> = OnceCell::new();
 #[derive(Debug)]
 enum GuiEvent {
     Log(String),
-    ImageOutput(Mat),
+    ImageOutput(Image),
 }
 
 #[derive(Debug, Default)]
 struct GuiState {
-    image_input: Option<Mat>,
-    image_output: Option<Mat>,
+    image_input: Option<Image>,
+    image_output: Option<Image>,
 }
 
 fn main() {
@@ -76,12 +73,11 @@ fn on_gui_event(builder: &Builder, state: &Rc<RefCell<GuiState>>, event: GuiEven
             buf.insert_at_cursor(&content);
             txt.scroll_to_mark(&mark, 0.0, false, 0.0, 0.0);
         }
-        GuiEvent::ImageOutput(mat) => {
-            let img: gtk::Image = builder.object("img_output");
-            match render_image(&img, Some(&mat)) {
-                Ok(()) => state.borrow_mut().image_output = Some(mat),
-                Err(err) => log!("Render failed: {}", err),
-            }
+        GuiEvent::ImageOutput(img) => {
+            builder
+                .object::<gtk::Image>("img_output")
+                .set_from_pixbuf(Some(&img.render()));
+            state.borrow_mut().image_output = Some(img);
         }
     }
 }
@@ -150,14 +146,10 @@ fn processor_runner(
     args: Box<dyn std::any::Any + Send>,
     state: Rc<RefCell<GuiState>>,
 ) {
-    let img = match (|| -> Result<_> {
-        let state = state.borrow();
-        let img = state.image_input.as_ref().context("No input")?;
-        Ok(Mat::copy(img).context("Copy failed")?)
-    })() {
-        Ok(img) => img,
-        Err(err) => {
-            log!("Error: {}", err);
+    let img = match state.borrow().image_input.clone() {
+        Some(img) => img,
+        None => {
+            log!("Error: No input image");
             return;
         }
     };
@@ -190,71 +182,21 @@ fn processor_runner(
 fn on_select_source_file(builder: &Builder, state: &Rc<RefCell<GuiState>>) {
     let fin: gtk::FileChooser = builder.object("file_input");
     if let Some(file_name) = fin.get_filename() {
+        let img_ctl: gtk::Image = builder.object("img_input");
+
         log!("Loading file {}", file_name.display());
-        match (|| -> Result<_> {
-            let mat = load_image(&file_name).context("Load image")?;
-            let img = builder.object("img_input");
-            render_image(&img, Some(&mat)).context("Render image")?;
-            log!("Loaded {}x{}", mat.rows(), mat.cols());
-            state.borrow_mut().image_input = Some(mat);
-            Ok(())
-        })() {
-            Ok(()) => {}
-            Err(err) => log!("Error: {}", err),
+        match Image::open(&file_name).context("Load image") {
+            Err(err) => {
+                log!("Error: {}", err);
+                // Clear input image.
+                state.borrow_mut().image_input = None;
+                img_ctl.set_from_pixbuf(None);
+            }
+            Ok((img, pixbuf)) => {
+                log!("Loaded {}x{}", pixbuf.get_width(), pixbuf.get_height());
+                state.borrow_mut().image_input = Some(img);
+                img_ctl.set_from_pixbuf(Some(&pixbuf));
+            }
         }
     }
-}
-
-fn load_image(path: &std::path::Path) -> Result<Mat> {
-    use opencv::imgcodecs::*;
-    let path_str = path.to_str().context("Path is not valid UTF8")?;
-    let img = imread(path_str, IMREAD_COLOR).context("imread")?;
-    Ok(img)
-}
-
-fn render_image(img: &gtk::Image, data: Option<&Mat>) -> Result<()> {
-    use gdk_pixbuf::{Colorspace, Pixbuf};
-    use opencv::core::*;
-
-    let data = match data {
-        Some(data) => data,
-        None => {
-            img.set_from_pixbuf(None);
-            return Ok(());
-        }
-    };
-
-    let (h, w) = (data.rows(), data.cols());
-    let pixbuf = Pixbuf::new(Colorspace::Rgb, false, 8, w, h).context("Pixbuf::new")?;
-    let typ = data.typ()?;
-    if typ == CV_8UC3 {
-        // Normal BGR.
-        for x in 0..h {
-            for y in 0..w {
-                let [b, g, r] = data.at_2d::<Vec3b>(x, y).unwrap().0;
-                pixbuf.put_pixel(y, x, r, g, b, 0);
-            }
-        }
-    } else if typ == CV_32FC2 {
-        // Complex matrix produced by DFT. Require normalization.
-        let mut mx = std::f32::EPSILON;
-        for x in 0..h {
-            for y in 0..w {
-                let [a, b] = data.at_2d::<Vec2f>(x, y).unwrap().0;
-                mx = mx.max((a.hypot(b) + 1.0).ln());
-            }
-        }
-        for x in 0..h {
-            for y in 0..w {
-                let [a, b] = data.at_2d::<Vec2f>(x, y).unwrap().0;
-                let gray = ((a.hypot(b) + 1.0).ln() / mx * 256.0) as u8;
-                pixbuf.put_pixel(y, x, gray, gray, gray, 0);
-            }
-        }
-    } else {
-        bail!("Cannot render matrix of opencv type {}", typ);
-    }
-
-    img.set_from_pixbuf(Some(&pixbuf));
-    Ok(())
 }
