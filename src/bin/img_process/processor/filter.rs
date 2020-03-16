@@ -110,13 +110,7 @@ fn linear_filter(src: Array3<f32>, kernel: Array2<f32>) -> Array3<f32> {
     let (h2, w2) = (h - ksize, w - ksize);
     let mut dest = Array::zeros((h2, w2, 3));
     for ((x, y, c), v) in dest.indexed_iter_mut() {
-        let mut sum = 0.0;
-        for i in 0..ksize {
-            for j in 0..ksize {
-                sum += src[[x + i, y + j, c]] * kernel[[i, j]];
-            }
-        }
-        *v = sum;
+        *v = (&src.slice(s![x..x + ksize, y..y + ksize, c]) * &kernel).sum();
     }
 
     dest

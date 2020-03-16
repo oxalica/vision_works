@@ -45,16 +45,7 @@ impl super::ImageProcessor for DFT {
             let dest_comp = fft_2d(src_comp, true);
 
             let (h, w) = dest_comp.dim();
-            // FIXME: Change to `Array::from_shape_fn`
-            let mut dest = Array::zeros((h, w, 3));
-            for x in 0..h {
-                for y in 0..w {
-                    let gray = dest_comp[[x, y]].norm();
-                    dest[[x, y, 0]] = gray;
-                    dest[[x, y, 1]] = gray;
-                    dest[[x, y, 2]] = gray;
-                }
-            }
+            let dest = Array::from_shape_fn((h, w, 3), |(x, y, _)| dest_comp[[x, y]].norm());
             Ok(Image::Normal(dest))
         }
     }

@@ -95,16 +95,11 @@ impl Image {
             Self::Complex(mat) => {
                 let (h, w) = mat.dim();
 
-                // Normalize factor.
-                let scale = mat
-                    .iter()
-                    .map(|v| v.norm_sqr().ln_1p())
-                    .max_by(|a, b| a.partial_cmp(&b).unwrap())
-                    .unwrap_or(1.0);
+                const SCALE: f32 = 14.0;
 
                 let mut pixels = Array::zeros((h, w, 3));
                 for ((x, y), v) in mat.indexed_iter() {
-                    let v = v.norm_sqr().ln_1p() / scale;
+                    let v = v.norm_sqr().ln_1p() * SCALE;
                     let gray = (v * 256.0).max(0.0).min(255.0) as u8;
                     pixels[[x, y, 0]] = gray;
                     pixels[[x, y, 1]] = gray;
