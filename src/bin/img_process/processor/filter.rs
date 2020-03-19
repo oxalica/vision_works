@@ -88,7 +88,7 @@ fn box_filter(src: Array3<f32>, kernel_size: usize) -> Array3<f32> {
 }
 
 /// Kernel:
-/// G(x, y) = 1/(2πσ^2) * e^((-x^2-y^2)/σ^2)
+/// G(x, y) = A e^((-x^2-y^2)/σ^2)
 fn gauss_filter(src: Array3<f32>, kernel_size: usize, sigma: f32) -> Array3<f32> {
     let mid = (kernel_size / 2) as f32;
     let mut kernel = Array::from_shape_fn((kernel_size, kernel_size), |(x, y)| {
