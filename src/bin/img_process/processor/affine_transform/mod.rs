@@ -3,6 +3,8 @@ use gtk::{prelude::*, Builder};
 use ndarray::prelude::*;
 use std::any::Any;
 
+mod cl;
+
 pub struct AffineTransform;
 
 impl super::ImageProcessor for AffineTransform {
@@ -27,17 +29,28 @@ impl super::ImageProcessor for AffineTransform {
                 let rotate: gtk::Scale = builder.object("scl_affine_trans_rotate");
                 let scale = scale.get_value() as f32;
                 let rotate = rotate.get_value() as f32;
-                run(Box::new((scale, rotate)));
+                run(Box::new((scale, rotate, false)));
+            })),
+            "on_affine_trans_run_ocl" => Some(Box::new(move || {
+                let scale: gtk::Scale = builder.object("scl_affine_trans_scale");
+                let rotate: gtk::Scale = builder.object("scl_affine_trans_rotate");
+                let scale = scale.get_value() as f32;
+                let rotate = rotate.get_value() as f32;
+                run(Box::new((scale, rotate, true)));
             })),
             _ => None,
         }
     }
 
     fn run(&self, args: Box<dyn Any + Send>, src: Image) -> Result<Image> {
-        let (scale, rotate): (f32, f32) = *args.downcast_ref().unwrap();
+        let (scale, rotate, ocl): (f32, f32, bool) = *args.downcast_ref().unwrap();
         let rotate = rotate.to_radians();
         let src = src.expect_normal()?;
-        let dest = affine_trans(src, scale, rotate);
+        let dest = if ocl {
+            cl::affine_trans(src, scale, rotate)?
+        } else {
+            affine_trans(src, scale, rotate)
+        };
         Ok(Image::Normal(dest))
     }
 }

@@ -171,6 +171,21 @@
                     <property name="height">2</property>
                   </packing>
                 </child>
+                <child>
+                  <object class="GtkButton">
+                    <property name="label" translatable="yes">Apply OpenCL</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="image_position">top</property>
+                    <signal name="clicked" handler="on_affine_trans_run_ocl" swapped="no"/>
+                  </object>
+                  <packing>
+                    <property name="left_attach">4</property>
+                    <property name="top_attach">0</property>
+                    <property name="height">2</property>
+                  </packing>
+                </child>
               </object>
             </child>
             <child type="tab">
@@ -845,7 +860,6 @@
             <property name="height_request">200</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
-            <property name="hscrollbar_policy">never</property>
             <property name="shadow_type">in</property>
             <child>
               <object class="GtkTextView" id="txt_log">
@@ -854,7 +868,6 @@
                 <property name="hscroll_policy">natural</property>
                 <property name="vscroll_policy">natural</property>
                 <property name="editable">False</property>
-                <property name="wrap_mode">word</property>
                 <property name="accepts_tab">False</property>
                 <property name="monospace">True</property>
               </object>
