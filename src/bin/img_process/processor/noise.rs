@@ -29,15 +29,16 @@ impl super::ImageProcessor for Noise {
     // Now only gaussion noise is implemented.
     fn run(&self, args: Box<dyn Any + Send>, src: Image) -> Result<Image> {
         use rand::prelude::*;
+        use rayon::prelude::*;
         let (mu, sigma): (f32, f32) = *args.downcast_ref().unwrap();
 
         let mut mat = src.expect_normal()?;
 
-        let mut rng = rand::thread_rng();
         let gauss = rand_distr::Normal::new(mu, sigma.max(0.0)).unwrap();
-        for v in mat.iter_mut() {
-            *v += gauss.sample(&mut rng);
-        }
+        ndarray::Zip::from(&mut mat).into_par_iter().for_each_init(
+            || rand::thread_rng(),
+            |mut rng, (v,)| *v += gauss.sample(&mut rng),
+        );
 
         Ok(Image::Normal(mat))
     }
