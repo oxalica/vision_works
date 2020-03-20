@@ -4,12 +4,15 @@ use gtk::{prelude::*, Builder};
 use ndarray::{prelude::*, Zip};
 use std::any::Any;
 
+mod cl;
+
 pub struct Filter;
 
 #[derive(Clone, Copy)]
 enum FilterType {
     Box,
     Gaussian,
+    GaussianCL,
     Wiener,
     Bilateral,
 }
@@ -50,6 +53,7 @@ impl super::ImageProcessor for Filter {
         match handler_name {
             "on_filter_run_box" => Some(on_filter(FilterType::Box)),
             "on_filter_run_gauss" => Some(on_filter(FilterType::Gaussian)),
+            "on_filter_run_gauss_ocl" => Some(on_filter(FilterType::GaussianCL)),
             "on_filter_run_wiener" => Some(on_filter(FilterType::Wiener)),
             "on_filter_run_bilateral" => Some(on_filter(FilterType::Bilateral)),
             _ => None,
@@ -69,8 +73,11 @@ impl super::ImageProcessor for Filter {
         );
 
         let dest = match filter_ty {
-            FilterType::Box => box_filter(src, neighbor),
-            FilterType::Gaussian => gauss_filter(src, neighbor, gauss_sigma),
+            FilterType::Box => linear_filter(src, box_filter_kernel(neighbor)),
+            FilterType::Gaussian => linear_filter(src, gauss_filter_kernel(neighbor, gauss_sigma)),
+            FilterType::GaussianCL => {
+                cl::linear_filter(src, gauss_filter_kernel(neighbor, gauss_sigma))?
+            }
             FilterType::Wiener => wiener_filter(src, neighbor),
             FilterType::Bilateral => bilateral_filter(src, neighbor, bila_sigma_d, bila_sigma_r),
         };
@@ -80,16 +87,15 @@ impl super::ImageProcessor for Filter {
 
 /// Kernel:
 /// K(x, y) = A * 1
-fn box_filter(src: Array3<f32>, kernel_size: usize) -> Array3<f32> {
+fn box_filter_kernel(kernel_size: usize) -> Array2<f32> {
     // Normalize factor.
     let k = 1.0 / kernel_size.pow(2) as f32;
-    let kernel = Array::from_elem((kernel_size, kernel_size), k);
-    linear_filter(src, kernel)
+    Array::from_elem((kernel_size, kernel_size), k)
 }
 
 /// Kernel:
 /// G(x, y) = A e^((-x^2-y^2)/σ^2)
-fn gauss_filter(src: Array3<f32>, kernel_size: usize, sigma: f32) -> Array3<f32> {
+fn gauss_filter_kernel(kernel_size: usize, sigma: f32) -> Array2<f32> {
     let mid = (kernel_size / 2) as f32;
     let mut kernel = Array::from_shape_fn((kernel_size, kernel_size), |(x, y)| {
         let (x, y) = (x as f32, y as f32);
@@ -97,7 +103,7 @@ fn gauss_filter(src: Array3<f32>, kernel_size: usize, sigma: f32) -> Array3<f32>
     });
     // Normalize.
     kernel /= kernel.sum();
-    linear_filter(src, kernel)
+    kernel
 }
 
 fn linear_filter(src: Array3<f32>, kernel: Array2<f32>) -> Array3<f32> {
