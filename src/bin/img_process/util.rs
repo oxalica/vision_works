@@ -50,16 +50,25 @@ impl Image {
             "Only 24-bit RGB colorspace is supported",
         );
 
-        let pixels = unsafe { pixbuf.get_pixels() as &[u8] };
+        let channels = pixbuf.get_n_channels() as usize;
+        assert!(channels == 3 || channels == 4);
         let row_stride = pixbuf.get_rowstride() as usize;
         let mut mat = Array::zeros((h, w, 3));
-        for x in 0..h {
-            for y in 0..w {
-                let idx = x * row_stride + y * 3;
-                let (r, g, b) = (pixels[idx], pixels[idx + 1], pixels[idx + 2]);
-                mat[[x, y, 0]] = r as f32 / 256.0;
-                mat[[x, y, 1]] = g as f32 / 256.0;
-                mat[[x, y, 2]] = b as f32 / 256.0;
+        unsafe {
+            // Lifetime of `pixels` should be strictly inside and exclusive with `pixbuf`.
+            let pixels = pixbuf.get_pixels();
+            for x in 0..h {
+                for y in 0..w {
+                    let idx = x * row_stride + y * channels;
+                    // Clear alpha channel if exists.
+                    if channels == 4 {
+                        pixels[idx + 3] = !0u8;
+                    }
+                    let (r, g, b) = (pixels[idx], pixels[idx + 1], pixels[idx + 2]);
+                    mat[[x, y, 0]] = r as f32 / 256.0;
+                    mat[[x, y, 1]] = g as f32 / 256.0;
+                    mat[[x, y, 2]] = b as f32 / 256.0;
+                }
             }
         }
         Ok((Image::Normal(mat), pixbuf))
