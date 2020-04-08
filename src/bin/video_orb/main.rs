@@ -3,6 +3,7 @@ use gio::prelude::*;
 use glib::{value::Value, IsA, Object};
 use gtk::{prelude::*, Application, ApplicationWindow, Builder};
 use once_cell::sync::OnceCell;
+use opencv::core::Mat;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
 
 const GLADE_SRC_PATH: &str = "glade/video_orb.glade";
@@ -11,16 +12,8 @@ static GUI_EVENT_TX: OnceCell<glib::Sender<GuiEvent>> = OnceCell::new();
 
 mod worker;
 
-/// RGB Frame
-pub struct Frame {
-    height: usize,
-    width: usize,
-    row_stride: usize,
-    data: Vec<u8>,
-}
-
 pub enum GuiEvent {
-    Frame(Frame),
+    Frame(Mat),
     Error(String),
 }
 
@@ -94,16 +87,25 @@ fn on_calc_fps(builder: &Builder, state: &RcGuiState) {
 fn on_event(event: GuiEvent, builder: &Builder, state: &RcGuiState) {
     match event {
         GuiEvent::Error(err) => popup_error(builder, &err),
-        GuiEvent::Frame(mut frame) => {
+        GuiEvent::Frame(mut mat) => {
             use gdk_pixbuf::{Colorspace, Pixbuf};
+            use opencv::core::MatTrait as _;
+
+            let (height, width) = (mat.rows() as usize, mat.cols() as usize);
+            let row_stride = mat.step1(0).unwrap() as usize;
+            let raw_data: Vec<u8> = unsafe {
+                std::slice::from_raw_parts_mut(mat.data_mut() as *mut u8, height * row_stride)
+                    .to_owned()
+            };
+
             let pixbuf = Pixbuf::new_from_mut_slice(
-                &mut frame.data,
+                raw_data,
                 Colorspace::Rgb,
                 false,
                 8,
-                frame.width as i32,
-                frame.height as i32,
-                frame.row_stride as i32,
+                width as i32,
+                height as i32,
+                row_stride as i32,
             );
 
             builder

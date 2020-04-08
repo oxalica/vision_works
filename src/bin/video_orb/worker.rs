@@ -1,7 +1,8 @@
-use super::{Frame, GuiEvent};
+use super::GuiEvent;
 use opencv::{
     core::Scalar,
     features2d::{draw_keypoints, DrawMatchesFlags},
+    imgproc::{cvt_color, COLOR_BGR2RGB},
     prelude::*,
     types::VectorOfKeyPoint,
     videoio::VideoCapture,
@@ -32,7 +33,10 @@ pub fn worker(
         // If not timeout, run the detector. Otherwise, skip frames to catch up.
         if Instant::now() < expect_show_inst {
             let detected = detect_features(&frame, &mut orb)?;
-            let out = convert_img(detected)?;
+
+            // GTK expects RGB colorspace.
+            let mut detected_rgb = Mat::default()?;
+            cvt_color(&detected, &mut detected_rgb, COLOR_BGR2RGB, 0)?;
 
             // If we still have time remained, sleep until the next frame.
             let now = Instant::now();
@@ -43,7 +47,10 @@ pub fn worker(
             if stop_guard.strong_count() == 0 {
                 break;
             }
-            tx.send(GuiEvent::Frame(out))?;
+            if tx.send(GuiEvent::Frame(detected_rgb)).is_err() {
+                // Main loop exited.
+                break;
+            }
         }
     }
 
@@ -62,29 +69,4 @@ fn detect_features(img: &Mat, detector: &mut impl Feature2DTrait) -> opencv::Res
         DrawMatchesFlags::DEFAULT,
     )?;
     Ok(img_out)
-}
-
-fn convert_img(mat: Mat) -> Result<Frame, failure::Error> {
-    use opencv::core::Vec3b;
-
-    let (height, width) = (mat.rows() as usize, mat.cols() as usize);
-    let row_stride = width * 3;
-    let mut data = vec![0u8; height * width * 3];
-
-    for x in 0..height {
-        for y in 0..width {
-            let idx = (x * width + y) * 3;
-            let [b, g, r] = mat.at_2d::<Vec3b>(x as i32, y as i32)?.0;
-            data[idx + 0] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-        }
-    }
-
-    Ok(Frame {
-        height,
-        width,
-        row_stride,
-        data,
-    })
 }
