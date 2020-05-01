@@ -3,3 +3,12 @@
 /.vscode
 /build
 /target
+__pycache__
+*.pyc
+
+result
+result-*
+
+# Unpacked model
+goturn.caffemodel
+goturn.prototxt

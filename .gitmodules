@@ -1,0 +1,3 @@
+[submodule "motion_tracking/goturn-files"]
+	path = motion_tracking/goturn-files
+	url = https://github.com/Mogball/goturn-files
