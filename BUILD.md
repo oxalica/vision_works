@@ -37,8 +37,9 @@
    sudo apt update
    sudo apt install cargo libgtk-3-dev ocl-icd-opencl-dev
    ```
+3. Compile and install `opencv-4` with `gtk3` and `ffmpeg` support.
 4. `cd` to the repository (this directory)
 5. build & run with:
    ```shell
-   cargo run --release --bin img_process
+   cargo run --release --bin img_process # or `video_orb`, etc.
    ```
