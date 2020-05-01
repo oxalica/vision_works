@@ -1,3 +1,4 @@
+import argparse
 import sys
 from pathlib import Path
 import cv2 as cv
@@ -7,7 +8,6 @@ VK_ESC = 27
 GOTURN_FILES = Path(__file__).with_name('goturn-files')
 GOTURL_PROTOTXT = Path(__file__).with_name('goturn.prototxt')
 GOTURN_CAFFEMODEL = Path(__file__).with_name('goturn.caffemodel')
-FRAME_DELAY_MS = 10
 
 TRACKERS = {
     'tld': cv.TrackerTLD_create,
@@ -18,35 +18,52 @@ TRACKERS = {
 cv.setUseOptimized(True)
 
 def main():
-    args = sys.argv[1:]
-    if args == ['init-goturn']:
+    def tup4(s: str):
+        try:
+            a, b, c, d = map(int, s.split(','))
+            return a, b, c, d
+        except ValueError:
+            raise argparse.ArgumentTypeError('Expecting `x,y,w,h`')
+    def int_pos(s: str):
+        try:
+            v = int(s)
+            assert v > 0
+            return v
+        except (ValueError, AssertionError):
+            raise argparse.ArgumentTypeError('Expecting positive integer')
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('tracker', choices=list(TRACKERS.keys()) + ['init-goturn'], help='Tracker')
+    parser.add_argument('input', type=Path, help='Video path or directory of images')
+    parser.add_argument('-o', '--output', type=Path, default=None, help='Output file to store result')
+    parser.add_argument('-t', '--delay', type=int_pos, default=10, help='Delay between frames in ms')
+    parser.add_argument('-b', '--init_bbox', type=tup4, default=None, help='Initial bounding box, in format x,y,h,w')
+    args = parser.parse_args()
+
+    if args.tracker == 'init-goturn':
         init_goturn_model()
+        return
 
-    elif len(args) == 2 and args[0] in TRACKERS:
-        if args[0] == 'goturn':
-            assert GOTURN_CAFFEMODEL.exists(), 'Run with argument `init-goturn` to initialize GOTURN model first'
+    if args.tracker == 'goturn':
+        assert GOTURN_CAFFEMODEL.exists(), 'Run with argument `init-goturn` to initialize GOTURN model first'
 
-        tracker = TRACKERS[args[0]]()
-        path = Path(args[1])
-        runner = TrackerRunner(tracker)
-        if path.is_dir():
-            runner.open_image_dir(path)
-        else:
-            video = cv.VideoCapture(str(path))
-            assert video.isOpened(), 'Cannot open video file'
-            runner.open_video(video)
-        runner.run()
-
+    tracker = TRACKERS[args.tracker]()
+    runner = TrackerRunner(tracker)
+    if args.input.is_dir():
+        runner.open_image_dir(args.input)
     else:
-        print(f'''
-Usage:
-python3 . init-goturn
-    Initialize GOTURN tracker.
+        video = cv.VideoCapture(str(args.input))
+        assert video.isOpened(), 'Cannot open video file'
+        runner.open_video(video)
+    runner.run(args.delay, args.init_bbox)
 
-python3 . <tld|kcf|goturn> <video_path|image_dir>
-    Run the specific tracker on the given video or images.
-''')
-        exit(1)
+    if args.output is not None:
+        with open(args.output, 'w') as fout:
+            for b in runner.result:
+                if b is not None:
+                    fout.write(f'{b[0]},{b[1]},{b[2]},{b[3]}\n')
+                else:
+                    fout.write('0,0,0,0\n')
 
 def init_goturn_model():
     from zipfile import ZipFile
@@ -65,7 +82,7 @@ class TrackerRunner(object):
     def __init__(self, tracker: cv.Tracker):
         self.tracker = tracker
         self.frames = None
-        self.init_bbox = None
+        self.result = []
 
     def open_video(self, video: cv.VideoCapture):
         def gen(video):
@@ -85,13 +102,15 @@ class TrackerRunner(object):
     def set_init_bbox(self, bbox: (int, int, int, int)):
         self.init_bbox = bbox
 
-    def _init_tracker(self):
-        if self.init_bbox is None:
+    def _init_tracker(self, init_bbox):
+        if init_bbox is None:
             frame = next(self.frames, None)
             assert frame is not None, 'Video has no frames'
-            self.init_bbox = cv.selectROI('Select object', frame, False)
+            init_bbox = cv.selectROI('Select object', frame, False)
             cv.destroyWindow('Select object')
-        assert self.tracker.init(frame, self.init_bbox)
+            # Ensure result length to match input frames.
+            self.result.append(init_bbox)
+        assert self.tracker.init(frame, init_bbox)
 
     def _process_frame(self, frame):
         ok, bbox = self.tracker.update(frame)
@@ -105,12 +124,15 @@ class TrackerRunner(object):
             cv.putText(frame, "Tracking failure detected", (100, 80), cv.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
 
         cv.imshow('Tracking', frame)
+        return bbox if ok else None
 
-    def run(self):
-        self._init_tracker()
+    def run(self, delay_ms, init_bbox = None):
+        assert delay_ms > 0
+        self._init_tracker(init_bbox)
         for frame in self.frames:
-            self._process_frame(frame)
-            if FRAME_DELAY_MS != 0 and cv.waitKey(FRAME_DELAY_MS) == VK_ESC:
+            bbox = self._process_frame(frame)
+            self.result.append(bbox)
+            if cv.waitKey(delay_ms) == VK_ESC:
                 raise InterruptedError('User canceled')
 
 if __name__ == '__main__':
