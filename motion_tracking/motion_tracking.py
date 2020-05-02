@@ -2,9 +2,11 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Tuple
 import cv2 as cv
 
 VK_ESC = 27
+BBox = Tuple[float, float, float, float]
 
 GOTURN_FILES = Path(__file__).with_name('goturn-files')
 GOTURL_PROTOTXT = Path(__file__).with_name('goturn.prototxt')
@@ -21,7 +23,7 @@ cv.setUseOptimized(True)
 def main():
     def tup4(s: str):
         try:
-            a, b, c, d = map(int, s.split(','))
+            a, b, c, d = map(float, s.split(','))
             return a, b, c, d
         except ValueError:
             raise argparse.ArgumentTypeError('Expecting `x,y,w,h`')
@@ -34,14 +36,17 @@ def main():
             raise argparse.ArgumentTypeError('Expecting positive integer')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('tracker', choices=list(TRACKERS.keys()) + ['init-goturn'], help='Tracker')
-    parser.add_argument('input', type=Path, help='Video path or directory of images')
-    parser.add_argument('-o', '--output', type=Path, default=None, help='Output file to store result')
-    parser.add_argument('-t', '--delay', type=int_pos, default=10, help='Delay between frames in ms')
-    parser.add_argument('-b', '--init_bbox', type=tup4, default=None, help='Initial bounding box, in format x,y,h,w')
+    subparsers = parser.add_subparsers(dest='command', required=True)
+    subparsers.add_parser('init-goturn')
+    parser_run = subparsers.add_parser('run')
+    parser_run.add_argument('tracker', choices=list(TRACKERS.keys()), help='Tracker')
+    parser_run.add_argument('input', type=Path, help='Video path or directory of images')
+    parser_run.add_argument('-o', '--output', type=Path, default=None, help='Output file to store result')
+    parser_run.add_argument('-t', '--delay', type=int_pos, default=10, help='Delay between frames in ms')
+    parser_run.add_argument('-b', '--init_bbox', type=tup4, default=None, help='Initial bounding box, in format x,y,h,w')
     args = parser.parse_args()
 
-    if args.tracker == 'init-goturn':
+    if args.command == 'init-goturn':
         init_goturn_model()
         return
 
@@ -58,13 +63,11 @@ def main():
         runner.open_video(video)
     runner.run(args.delay, args.init_bbox)
 
-    if args.output is not None:
+    if args.output is None:
+        runner.write_result(sys.stdout)
+    else:
         with open(args.output, 'w') as fout:
-            for b in runner.result:
-                if b is not None:
-                    fout.write(f'{b[0]},{b[1]},{b[2]},{b[3]}\n')
-                else:
-                    fout.write('0,0,0,0\n')
+            runner.write_result(fout)
 
 def init_goturn_model():
     from zipfile import ZipFile
@@ -96,25 +99,29 @@ class TrackerRunner(object):
 
     def open_image_dir(self, dir: Path):
         def gen(dir):
-            for path in sorted(dir.glob('*')):
+            for path in sorted(dir.glob('*.jpg')):
                 yield cv.imread(str(path))
         self.frames = gen(dir)
 
-    def set_init_bbox(self, bbox: (int, int, int, int)):
+    def set_init_bbox(self, bbox: BBox):
         self.init_bbox = bbox
 
     def _init_tracker(self, init_bbox):
+        frame = next(self.frames, None)
+        assert frame is not None, 'Video has no frames'
         if init_bbox is None:
-            frame = next(self.frames, None)
-            assert frame is not None, 'Video has no frames'
             init_bbox = cv.selectROI('Select object', frame, False)
             cv.destroyWindow('Select object')
-            # Ensure result length to match input frames.
-            self.result.append(init_bbox)
+        # Ensure result length to match input frames.
+        self.result.append(init_bbox)
         assert self.tracker.init(frame, init_bbox)
 
     def _process_frame(self, frame):
-        ok, bbox = self.tracker.update(frame)
+        try:
+            ok, bbox = self.tracker.update(frame)
+        except cv.error as e:
+            print(e, file=sys.stderr)
+            ok = False
 
         # Draw
         if ok:
@@ -135,6 +142,13 @@ class TrackerRunner(object):
             self.result.append(bbox)
             if cv.waitKey(delay_ms) == VK_ESC:
                 raise InterruptedError('User canceled')
+
+    def write_result(self, fout):
+        for b in self.result:
+            if b is not None:
+                fout.write(f'{b[0]},{b[1]},{b[2]},{b[3]}\n')
+            else:
+                fout.write('0,0,0,0\n')
 
 if __name__ == '__main__':
     main()
