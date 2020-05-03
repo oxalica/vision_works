@@ -7,18 +7,19 @@ from pathlib import Path
 from typing import List, Tuple
 
 MOTION_TRACKING_EXEC = Path(__file__).with_name('motion_tracking.py').absolute()
-TRACKING_METHODS = 'tld goturn'.split()
+TRACKING_METHODS = 'tld kcf goturn'.split()
 BBox = Tuple[float, float, float, float]
 
 def main():
     args = sys.argv[1:]
-    if len(args) != 3:
+    if len(args) not in (3, 4):
         print(
-            f'Usage: {sys.argv[0]} <otb_dataset_dir> <vot_dataset_dir> <result_dir>',
+            f'Usage: {sys.argv[0]} <otb_dataset_dir> <vot_dataset_dir> <result_dir> [filter]',
             file=sys.stderr,
         )
         exit(1)
-    otb_dir, vot_dir, result_dir = map(Path, args)
+    otb_dir, vot_dir, result_dir = map(Path, args[:3])
+    filter = args[3] if len(args) == 4 else ''
     assert otb_dir.is_dir() and vot_dir.is_dir(), 'Invalid path'
     result_dir.mkdir(exist_ok=True)
 
@@ -29,7 +30,7 @@ def main():
         for method in TRACKING_METHODS:
             name = f'OTB-{dir.name}-{method}'
             output = result_dir / f'{name}.txt'
-            if not output.exists():
+            if filter in name and not output.exists():
                 print(f'Testing {name}')
                 with open(dir / 'groundtruth_rect.txt', 'r') as fin:
                     bbox = [otb_parse_bbox(line) for line in fin]
@@ -39,7 +40,7 @@ def main():
         for method in TRACKING_METHODS:
             name = f'VOT-{dir.name}-{method}'
             output = result_dir / f'{name}.txt'
-            if not output.exists():
+            if filter in name and not output.exists():
                 print(f'Testing {name}')
                 with open(dir / 'groundtruth.txt', 'r') as fin:
                     bbox = [vot_parse_bbox(line) for line in fin]
